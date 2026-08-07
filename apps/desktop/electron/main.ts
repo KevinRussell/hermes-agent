@@ -275,13 +275,19 @@ const PRELOAD_PATH = path.join(APP_ROOT, 'dist', 'electron-preload.js')
 // (1/true → always disable, 0/false → keep GPU on).
 const REMOTE_DISPLAY_REASON = detectRemoteDisplay()
 
-if (REMOTE_DISPLAY_REASON) {
+// M3 Mac GPU compositor crash-loop (renderer exitCode=5 at boot). Disable
+// hardware acceleration on Apple Silicon macOS unconditionally — the env var
+// override above is too fragile (depends on launch method). The CPU cost is
+// negligible on M3 and it eliminates the blink/reset loop entirely.
+const IS_APPLE_SILICON_MAC = process.platform === 'darwin' && process.arch === 'arm64'
+
+if (REMOTE_DISPLAY_REASON || IS_APPLE_SILICON_MAC) {
   app.disableHardwareAcceleration()
   // Belt-and-suspenders for X11/VNC, where the Viz compositor can still glitch
   // with only --disable-gpu: force compositing onto the CPU too.
   app.commandLine.appendSwitch('disable-gpu-compositing')
   console.log(
-    `[hermes] remote display detected (${REMOTE_DISPLAY_REASON}); disabling GPU hardware acceleration to prevent flicker`
+    `[hermes] ${IS_APPLE_SILICON_MAC ? 'Apple Silicon Mac' : `remote display detected (${REMOTE_DISPLAY_REASON})`}; disabling GPU hardware acceleration to prevent crash-loop/flicker`
   )
 }
 

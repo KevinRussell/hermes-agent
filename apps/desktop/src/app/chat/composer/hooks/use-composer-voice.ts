@@ -117,7 +117,15 @@ export function useComposerVoice({
     triggerHaptic('submit')
     resetBrowseState(sessionId)
     clearDraft()
-    await onSubmit(text)
+    // Thread the CURRENT session id explicitly. Without it the submit pipeline
+    // falls back to `activeSessionIdRef`, which can be stale/null at the instant
+    // a voice turn lands (the #55578 fork class) — so a spoken message mints a
+    // brand-new session tab instead of continuing the one on screen. An explicit
+    // target is the highest-trust rung in submit.ts's resolver, so this forces
+    // reuse of the open chat. Typed sends don't hit this because they go through
+    // the composer's submit engine on the same render; the voice turn fires from
+    // the audio callback, off that render cycle.
+    await onSubmit(text, sessionId ? { sessionId } : undefined)
   }
 
   const wakePausedRef = useRef(false)

@@ -47,8 +47,12 @@ const resolveMode = (mode: ThemeMode, systemDark = matchesQuery('(prefers-color-
 const normalizeSkin = (name: string | null): string =>
   name && resolveTheme(name) && !RETIRED_SKINS.has(name) ? name : DEFAULT_SKIN_NAME
 
+// Unset/invalid mode defaults to 'dark' (not 'light' or 'system') so a fresh
+// cache after a reboot boots dark instead of flashing white on a light-mode
+// OS. An explicitly stored 'light'/'system' is honored unchanged — this only
+// changes the no-preference case.
 const normalizeMode = (value: string | null): ThemeMode =>
-  value === 'light' || value === 'dark' || value === 'system' ? value : 'light'
+  value === 'light' || value === 'dark' || value === 'system' ? value : 'dark'
 
 // ─── Per-profile appearance persistence ─────────────────────────────────────
 // Skin and mode are each stored per profile. "default" isn't a real profile —

@@ -217,6 +217,7 @@
       "category": "public.app-category.developer-tools",
       "entitlements": "electron/entitlements.mac.plist",
       "entitlementsInherit": "electron/entitlements.mac.inherit.plist",
+      "identity": "Hermes Local Signing",
       "extendInfo": {
         "CFBundleDisplayName": "Hermes",
         "CFBundleExecutable": "Hermes",

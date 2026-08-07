@@ -19,7 +19,12 @@
         let bg = localStorage.getItem('hermes-boot-background')
         let scheme = localStorage.getItem('hermes-boot-color-scheme')
         if (!bg) {
-          const dark = window.matchMedia('(prefers-color-scheme: dark)').matches
+          // No saved boot paint yet (first run / fresh cache after reboot).
+          // Default to DARK rather than tracking the OS so a reboot never
+          // flashes a white window on a light-mode Mac. An explicitly chosen
+          // light mode still writes its own boot keys above, so this only
+          // affects the un-initialized case.
+          const dark = window.matchMedia('(prefers-color-scheme: light)').matches ? false : true
           bg = dark ? '#111111' : '#f7f7f7'
           scheme = dark ? 'dark' : 'light'
         }
