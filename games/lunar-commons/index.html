@@ -1,0 +1,1587 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Lunar Commons</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@500;600;700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: the lunar board fills the screen; mission-control panels float at the edges
+   (players left, controls right). Below 820px they become a top strip and a bottom sheet. */
+:root {
+  --bg: #060a14;
+  --panel: rgba(9, 15, 31, 0.86);
+  --panel-solid: #0b1328;
+  --line: #22304f;
+  --line-soft: rgba(126, 156, 214, 0.16);
+  --fg: #e6e9f2;
+  --muted: #929cb8;
+  --dim: #5f6a88;
+  --sun: #f2b64b;
+  --ice: #7fd3f1;
+  --good: #4dc48c;
+  --bad: #e8586d;
+  --f-display: "Chakra Petch", "Trebuchet MS", sans-serif;
+  --f-body: "IBM Plex Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --f-mono: "IBM Plex Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
+  color-scheme: dark;
+}
+html, body { height: 100%; }
+[hidden] { display: none !important; }
+body { margin: 0; background: var(--bg); color: var(--fg); font-family: var(--f-body); font-size: 14px; overflow: hidden; -webkit-font-smoothing: antialiased; }
+* { box-sizing: border-box; }
+button { font: inherit; color: inherit; }
+#app { position: relative; height: 100%; overflow: hidden; }
+#scene { position: absolute; inset: 0; width: 100%; height: 100%; display: block; touch-action: none; cursor: grab; }
+#scene.armed { cursor: crosshair; }
+
+.panel { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px); }
+.eyebrow { font-family: var(--f-mono); font-size: 10.5px; letter-spacing: .12em; text-transform: uppercase; color: var(--muted); }
+.num { font-family: var(--f-mono); font-variant-numeric: tabular-nums; }
+
+/* Top bar */
+.topbar { position: absolute; top: 12px; left: 16px; right: 16px; display: flex; align-items: center; gap: 12px; pointer-events: none; z-index: 5; }
+.brand { display: flex; flex-direction: column; line-height: 1.05; }
+.brand h1 { margin: 0; font-family: var(--f-display); font-weight: 700; font-size: 22px; letter-spacing: .04em; text-transform: uppercase; }
+.brand h1 span { color: var(--sun); }
+.brand small { font-family: var(--f-mono); font-size: 10.5px; color: var(--muted); letter-spacing: .1em; text-transform: uppercase; margin-top: 3px; }
+.chips { display: flex; gap: 8px; flex-wrap: wrap; margin-left: 8px; }
+.chip { display: inline-flex; align-items: center; gap: 6px; padding: 5px 10px; border-radius: 999px; border: 1px solid var(--line); background: var(--panel); font-size: 12px; white-space: nowrap; }
+.chip b { font-weight: 600; }
+.spacer { flex: 1; }
+.iconbtn { white-space: nowrap; pointer-events: auto; border: 1px solid var(--line); background: var(--panel); border-radius: 8px; padding: 6px 11px; font-size: 12.5px; cursor: pointer; }
+.iconbtn:hover { border-color: var(--sun); }
+:focus-visible { outline: 2px solid var(--sun); outline-offset: 2px; }
+
+/* Side columns */
+.col { position: absolute; top: 70px; bottom: 16px; display: flex; flex-direction: column; gap: 10px; z-index: 4; pointer-events: none; }
+.col > * { pointer-events: auto; }
+.col.left { left: 16px; width: 264px; }
+.col.right { right: 16px; width: 316px; }
+
+/* Players */
+#players { padding: 10px; display: flex; flex-direction: column; gap: 6px; }
+.pcard { display: grid; grid-template-columns: 10px 1fr auto; gap: 4px 10px; align-items: center; padding: 8px 8px 8px 6px; border-radius: 8px; border: 1px solid transparent; }
+.pcard.active { border-color: var(--line); background: rgba(255,255,255,.035); }
+.pdot { width: 10px; height: 10px; border-radius: 50%; grid-row: 1 / span 2; align-self: start; margin-top: 4px; }
+.pname { font-weight: 600; font-size: 13px; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pname em { font-style: normal; font-weight: 400; color: var(--muted); font-size: 11px; margin-left: 4px; }
+.pcred { font-family: var(--f-mono); font-size: 13px; text-align: right; }
+.pcred.neg { color: var(--bad); }
+.pmeta { grid-column: 2 / span 2; display: flex; gap: 8px; align-items: center; font-size: 11.5px; color: var(--muted); flex-wrap: wrap; }
+.mode { font-family: var(--f-mono); font-size: 10px; letter-spacing: .08em; text-transform: uppercase; padding: 2px 6px; border-radius: 4px; border: 1px solid var(--line); color: var(--muted); }
+.mode.alone { color: #f08a7a; border-color: rgba(240,138,122,.45); }
+.mode.commons { color: var(--ice); border-color: rgba(127,211,241,.45); }
+.mode.consortium { color: var(--sun); border-color: rgba(242,182,75,.45); }
+
+/* Stats */
+#stats { padding: 12px; display: grid; gap: 10px; }
+.stat { display: grid; grid-template-columns: 1fr auto; align-items: baseline; gap: 2px 8px; }
+.stat .v { font-family: var(--f-mono); font-size: 15px; }
+.stat canvas { grid-column: 1 / span 2; width: 100%; height: 30px; display: block; }
+.stat .hint { grid-column: 1 / span 2; font-size: 11px; color: var(--dim); }
+
+/* Control */
+#control { padding: 14px; display: flex; flex-direction: column; gap: 10px; }
+#control h2 { margin: 0; font-family: var(--f-display); font-size: 18px; font-weight: 600; text-wrap: balance; }
+#control p { margin: 0; color: var(--muted); line-height: 1.45; font-size: 13px; }
+.opts { display: grid; gap: 8px; }
+.opt { text-align: left; border: 1px solid var(--line); background: rgba(255,255,255,.02); border-radius: 8px; padding: 10px 12px; cursor: pointer; display: grid; gap: 3px; }
+.opt:hover:not(:disabled) { border-color: var(--muted); }
+.opt.on { border-color: var(--sun); background: rgba(242,182,75,.08); }
+.opt:disabled { opacity: .45; cursor: not-allowed; }
+.opt .t { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; font-weight: 600; font-size: 13.5px; }
+.opt .t .num { font-weight: 500; font-size: 12.5px; color: var(--sun); }
+.opt .d { color: var(--muted); font-size: 12px; line-height: 1.4; }
+.row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+.btn { border: 1px solid var(--sun); background: var(--sun); color: #1a1204; font-weight: 600; border-radius: 8px; padding: 8px 14px; cursor: pointer; }
+.btn.ghost { background: transparent; color: var(--fg); border-color: var(--line); }
+.btn.ghost:hover { border-color: var(--muted); }
+.working { display: flex; align-items: center; gap: 10px; color: var(--muted); }
+.pulse { width: 8px; height: 8px; border-radius: 50%; background: var(--sun); animation: pulse 1s ease-in-out infinite; }
+@keyframes pulse { 50% { opacity: .25; } }
+
+/* Inspector + log */
+#inspector { padding: 12px 14px; display: grid; gap: 6px; }
+.insp-h { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
+.insp-h b { font-family: var(--f-display); font-size: 17px; }
+.res { display: flex; gap: 14px; font-size: 13px; }
+.res .ice { color: var(--ice); }
+.res .sun { color: var(--sun); }
+.res .rough { color: var(--bad); }
+.insp-note { font-size: 12px; color: var(--muted); line-height: 1.4; }
+#log { padding: 10px 14px; flex: 1; min-height: 80px; overflow: auto; }
+#log ol { list-style: none; margin: 6px 0 0; padding: 0; display: grid; gap: 5px; }
+#log li { font-size: 12px; color: var(--muted); line-height: 1.4; display: grid; grid-template-columns: 26px 1fr; gap: 6px; }
+#log li .rn { font-family: var(--f-mono); color: var(--dim); }
+#log li b { color: var(--fg); font-weight: 500; }
+
+/* Floating yield labels */
+#floaters { position: absolute; inset: 0; pointer-events: none; z-index: 3; overflow: hidden; }
+.floater { position: absolute; transform: translate(-50%, -100%); font-family: var(--f-mono); font-weight: 500; font-size: 13px; padding: 1px 6px; border-radius: 4px; background: rgba(6,10,20,.8); border: 1px solid var(--line); animation: rise 1.6s ease-out forwards; }
+@keyframes rise { from { opacity: 0; margin-top: 6px; } 15% { opacity: 1; } 75% { opacity: 1; } to { opacity: 0; margin-top: -26px; } }
+
+/* Modals */
+.modal { position: absolute; inset: 0; z-index: 10; display: grid; place-items: center; padding: 16px; background: rgba(3,6,12,.62); }
+.sheet { width: min(640px, 100%); max-height: 100%; overflow: auto; background: var(--panel-solid); border: 1px solid var(--line); border-radius: 14px; padding: 22px; display: grid; gap: 14px; }
+.sheet h2 { margin: 0; font-family: var(--f-display); font-size: 26px; font-weight: 700; letter-spacing: .02em; text-wrap: balance; }
+.sheet h3 { margin: 6px 0 0; font-family: var(--f-display); font-size: 15px; font-weight: 600; letter-spacing: .04em; text-transform: uppercase; color: var(--sun); }
+.sheet p, .sheet li { color: var(--muted); line-height: 1.55; font-size: 13.5px; max-width: 64ch; }
+.sheet p { margin: 0; }
+.sheet ul { margin: 0; padding-left: 18px; display: grid; gap: 4px; }
+.sheet strong { color: var(--fg); font-weight: 600; }
+.seats { display: grid; gap: 8px; }
+.seat { display: grid; grid-template-columns: 12px 1fr auto; gap: 10px; align-items: center; padding: 8px 10px; border: 1px solid var(--line); border-radius: 8px; }
+.seat small { display: block; color: var(--muted); font-size: 12px; }
+.seg { display: inline-flex; border: 1px solid var(--line); border-radius: 7px; overflow: hidden; }
+.seg button { background: transparent; border: 0; padding: 6px 12px; cursor: pointer; font-size: 12.5px; color: var(--muted); }
+.seg button.on { background: var(--sun); color: #1a1204; font-weight: 600; }
+.settings { display: flex; gap: 16px; flex-wrap: wrap; align-items: center; }
+.settings label { display: flex; gap: 8px; align-items: center; font-size: 13px; color: var(--muted); }
+.tbl-wrap { overflow-x: auto; }
+table { border-collapse: collapse; width: 100%; font-size: 13px; }
+th, td { text-align: left; padding: 7px 8px; border-bottom: 1px solid var(--line); }
+th { font-family: var(--f-mono); font-size: 10.5px; letter-spacing: .1em; text-transform: uppercase; color: var(--muted); font-weight: 500; }
+td.num, th.num { text-align: right; }
+.outcome { font-family: var(--f-display); font-weight: 700; font-size: 38px; letter-spacing: .03em; text-transform: uppercase; line-height: 1; }
+.outcome.growth { color: var(--good); }
+.outcome.monopoly { color: var(--bad); }
+.outcome.stagnation { color: var(--muted); }
+.kpis { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
+.kpi { border: 1px solid var(--line); border-radius: 8px; padding: 10px; }
+.kpi .v { font-family: var(--f-mono); font-size: 20px; }
+.kpi .l { font-size: 11.5px; color: var(--muted); }
+#endChart { width: 100%; height: 130px; display: block; }
+.legend { display: flex; gap: 14px; font-size: 12px; color: var(--muted); }
+.legend i { display: inline-block; width: 14px; height: 3px; vertical-align: middle; margin-right: 5px; border-radius: 2px; }
+.fine { font-size: 11.5px !important; color: var(--dim) !important; }
+.mode-table td:first-child { white-space: nowrap; }
+
+#sheetToggle { display: none; }
+
+@media (max-width: 820px) {
+  .topbar { top: 8px; left: 12px; right: 12px; gap: 8px; }
+  .brand h1 { font-size: 17px; }
+  .brand small { display: none; }
+  .chips { display: none; }
+  .iconbtn { padding: 5px 8px; font-size: 12px; }
+  .wide-only { display: none; }
+  .col.left { top: 50px; left: 12px; right: 12px; width: auto; bottom: auto; }
+  #players { flex-direction: row; overflow-x: auto; padding: 6px; gap: 4px; }
+  .pcard { min-width: 132px; padding: 6px; }
+  .pmeta .extra { display: none; }
+  #stats { display: none; }
+  .col.right { top: auto; left: 0; right: 0; bottom: 0; width: auto; max-height: 44%; gap: 0; background: var(--panel-solid); border-top: 1px solid var(--line); border-radius: 14px 14px 0 0; overflow: auto; padding-bottom: env(safe-area-inset-bottom, 0px); }
+  .col.right .panel { background: transparent; border: 0; border-radius: 0; backdrop-filter: none; }
+  #log { display: none; }
+  #app.show-log #log { display: block; flex: none; max-height: 160px; border-top: 1px solid var(--line); }
+  #sheetToggle { display: inline-block; }
+  .kpis { grid-template-columns: 1fr; }
+  .outcome { font-size: 30px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .floater, .pulse { animation: none; }
+}
+</style>
+
+<div id="app">
+  <canvas id="scene" aria-label="3D lunar south pole game board"></canvas>
+
+  <div class="topbar">
+    <div class="brand"><h1>Lunar <span>Commons</span></h1><small>South pole development exercise</small></div>
+    <div class="chips">
+      <span class="chip"><span class="eyebrow">Round</span> <b class="num" id="roundChip">1 / 10</b></span>
+      <span class="chip" id="phaseChip">Funding</span>
+      <span class="chip event" id="eventChip" title="">Quiet sky</span>
+    </div>
+    <div class="spacer"></div>
+    <button class="iconbtn" id="sheetToggle" type="button">Log</button>
+    <button class="iconbtn" id="viewBtn" type="button" title="Reset camera (R)">View</button>
+    <button class="iconbtn" id="helpBtn" type="button">Rules</button>
+    <button class="iconbtn" id="newBtn" type="button">New<span class="wide-only"> game</span></button>
+  </div>
+
+  <div class="col left">
+    <section class="panel" id="players" aria-label="Operators"></section>
+    <section class="panel" id="stats" aria-label="Settlement indicators">
+      <div class="stat"><span class="eyebrow">Development index</span><span class="v" id="diV">0</span><canvas id="diC"></canvas><span class="hint">Outposts + 2 × power towers + ¼ × surveyed tiles</span></div>
+      <div class="stat"><span class="eyebrow">Largest operator share</span><span class="v" id="topV">25%</span><canvas id="topC"></canvas><span class="hint">Share of total net worth. Above 45% counts as a monopoly.</span></div>
+      <div class="stat"><span class="eyebrow">Open survey data</span><span class="v" id="dataV">0%</span><span class="hint">Tiles whose data every operator can see</span></div>
+    </section>
+  </div>
+
+  <div class="col right">
+    <section class="panel" id="control" aria-live="polite"></section>
+    <section class="panel" id="inspector"></section>
+    <section class="panel" id="log"><span class="eyebrow">Mission log</span><ol id="logList"></ol></section>
+  </div>
+
+  <div id="floaters"></div>
+
+  <div class="modal" id="setupModal" hidden>
+    <div class="sheet" role="dialog" aria-modal="true" aria-labelledby="setupTitle">
+      <div>
+        <div class="eyebrow">Four operators · one south pole</div>
+        <h2 id="setupTitle">Who is at the table?</h2>
+      </div>
+      <p>Each round, every operator decides how to fund its work on the Moon: <strong>alone</strong>, through the <strong>commons</strong>, or in a <strong>consortium</strong>. That choice decides who sees the survey data, who can use the power towers, and whether the region ends in stagnation, monopoly, or sustained growth.</p>
+      <div class="seats" id="seats"></div>
+      <div class="settings">
+        <label>Rounds <span class="seg" id="roundsSeg"><button type="button" data-v="8">8</button><button type="button" data-v="10">10</button><button type="button" data-v="12">12</button></span></label>
+        <label>AI pace <span class="seg" id="paceSeg"><button type="button" data-v="normal">Normal</button><button type="button" data-v="fast">Fast</button></span></label>
+      </div>
+      <div class="row"><button class="btn" id="startBtn" type="button">Start mission</button><button class="btn ghost" id="setupRules" type="button">Read the rules</button></div>
+      <p class="fine">An educational simulation of resource-governance choices. Credits are fictional, crater positions are stylized, and nothing here is financial or investment advice.</p>
+    </div>
+  </div>
+
+  <div class="modal" id="helpModal" hidden>
+    <div class="sheet" role="dialog" aria-modal="true" aria-labelledby="helpTitle">
+      <div class="row" style="justify-content:space-between"><h2 id="helpTitle">How the exercise works</h2><button class="btn ghost" type="button" data-close>Close</button></div>
+      <p>The board is a 10 × 8 grid over the lunar south pole. The Sun never climbs more than about 1.5° above the horizon here, so crater floors sit in permanent shadow and hold <strong style="color:var(--ice)">water ice</strong>, while rims and massifs catch near-constant <strong style="color:var(--sun)">sunlight</strong>. You can see the terrain, but a tile's exact resources are unknown until someone surveys it.</p>
+      <h3>A round</h3>
+      <ul>
+        <li><strong>Event.</strong> One event is drawn (launch window, solar particle event, supply shortage…).</li>
+        <li><strong>Funding.</strong> Each operator picks a funding model for the round. Choices are made in turn order and are visible to those who choose later.</li>
+        <li><strong>Operations.</strong> Each operator takes 2 actions.</li>
+        <li><strong>Production.</strong> Each outpost yields ice + sun + 1 per power tower within one tile that serves it (max +3), minus 1 credit upkeep.</li>
+      </ul>
+      <h3>Funding models</h3>
+      <div class="tbl-wrap"><table class="mode-table">
+        <tr><th>Model</th><th>Costs</th><th>Survey data</th><th>Power towers</th><th>Revenue</th></tr>
+        <tr><td><span class="mode alone">Alone</span></td><td>Full price</td><td>Private</td><td>Serve only you</td><td>Keep 100%, plus safety zones</td></tr>
+        <tr><td><span class="mode consortium">Consortium</span></td><td>25% off</td><td>Shared with members</td><td>Serve members</td><td>20% pooled and split among members</td></tr>
+        <tr><td><span class="mode commons">Commons</span></td><td>Pool pays up to half</td><td>Public to all</td><td>Serve everyone</td><td>30% to the commons pool</td></tr>
+      </table></div>
+      <p>A consortium needs at least two members in the same round; a lone consortium bidder operates alone. While anyone funds the commons, Earth agencies add a 3-credit grant each round. Whenever the pool reaches 8 credits it builds a public relay tower (white disc) where it serves the most different operators.</p>
+      <h3>Actions</h3>
+      <ul>
+        <li><strong>Survey</strong> (2): reveal a tile's ice, sun and terrain roughness.</li>
+        <li><strong>Land outpost</strong> (5): claim an empty tile. Landing blind on rough terrain fails 35% of the time. An outpost landed while operating <strong>alone</strong> declares a safety zone: no other operator may land on the four tiles bordering it.</li>
+        <li><strong>Power tower</strong> (6): build on a tile you hold. It boosts every eligible outpost on and around it.</li>
+      </ul>
+      <h3>How it ends</h3>
+      <ul>
+        <li><strong>Stagnation</strong>: the development index stays under the target for the game length.</li>
+        <li><strong>Monopolization</strong>: one operator holds more than 45% of total net worth.</li>
+        <li><strong>Sustained growth</strong>: the region is developed and no one dominates.</li>
+      </ul>
+      <p>Net worth is credits + 4 per outpost + 5 per power tower you own. Everyone at the table shares the regional outcome, so a personal win inside a monopoly or a stagnant region is a hollow one.</p>
+      <h3>Controls</h3>
+      <ul>
+        <li>Drag to orbit, scroll or pinch to zoom, right-drag or two-finger drag to pan. Press <strong>R</strong> to reset the view.</li>
+        <li>Pick an action, then click a tile. On touch screens, tap a tile and confirm.</li>
+      </ul>
+      <p class="fine">An educational simulation of resource-governance choices. Credits are fictional, crater positions are stylized, and nothing here is financial or investment advice.</p>
+    </div>
+  </div>
+
+  <div class="modal" id="endModal" hidden>
+    <div class="sheet" role="dialog" aria-modal="true" aria-labelledby="endTitle">
+      <div>
+        <div class="eyebrow" id="endEyebrow">Final assessment</div>
+        <div class="outcome" id="endTitle">Sustained growth</div>
+      </div>
+      <p id="endText"></p>
+      <div class="kpis">
+        <div class="kpi"><div class="v" id="kDi">0</div><div class="l" id="kDiL">Development index</div></div>
+        <div class="kpi"><div class="v" id="kTop">0%</div><div class="l">Largest operator share</div></div>
+        <div class="kpi"><div class="v" id="kData">0%</div><div class="l">Open survey data</div></div>
+      </div>
+      <div>
+        <canvas id="endChart"></canvas>
+        <div class="legend"><span><i style="background:var(--good)"></i>Development index</span><span><i style="background:var(--bad)"></i>Largest share</span></div>
+      </div>
+      <div class="tbl-wrap"><table id="standings"></table></div>
+      <p id="endNote"></p>
+      <div class="row"><button class="btn" id="againBtn" type="button">Play again</button><button class="btn ghost" id="setupBtn" type="button">Change setup</button><button class="btn ghost" id="boardBtn" type="button">Look at the board</button></div>
+    </div>
+  </div>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script>
+"use strict";
+// ===LOGIC-START===
+// Pure game logic: no DOM, no three.js. Everything here runs headless too.
+const COLS = 10, ROWS = 8, HR = 64, TW = COLS * HR, TH = ROWS * HR, ALL = 15;
+const ROW_L = "ABCDEFGH";
+const COST = { prospect: 2, outpost: 5, infra: 6 };
+const RELAY_COST = 8, UPKEEP = 1, GRANT = 3, BLIND_FAIL = 0.35, MONOPOLY_SHARE = 0.45;
+const SHARE = { alone: 0, consortium: 0.2, commons: 0.3 };
+const MODES = ["alone", "commons", "consortium"];
+const MODE_LABEL = { alone: "Alone", commons: "Commons", consortium: "Consortium" };
+const ACTION_LABEL = { prospect: "Survey", outpost: "Land outpost", infra: "Power tower" };
+
+const PLAYER_DEFS = [
+  { name: "Ember Industries", short: "Ember", color: "#d8362d", persona: "extractor", blurb: "Moves fast and prefers to go it alone." },
+  { name: "Tidewater Coop", short: "Tidewater", color: "#2c66d8", persona: "steward", blurb: "Backs shared data and public infrastructure." },
+  { name: "Helios Ventures", short: "Helios", color: "#efc31f", persona: "dealmaker", blurb: "Looks for partners to split the bill." },
+  { name: "Verdant Lunar", short: "Verdant", color: "#22a152", persona: "adaptive", blurb: "Copies whatever model paid best last round." },
+];
+const PERSONA_W = {
+  extractor: { alone: .72, consortium: .18, commons: .10 },
+  steward: { alone: .12, consortium: .18, commons: .70 },
+  dealmaker: { alone: .20, consortium: .65, commons: .15 },
+  adaptive: { alone: .34, consortium: .33, commons: .33 },
+};
+
+const CRATERS = [
+  { n: "Cabeus", x: 1.3, y: 1.0, r: 1.15 },
+  { n: "Amundsen", x: 7.3, y: 1.3, r: 1.05 },
+  { n: "Nobile", x: 8.9, y: 2.5, r: 0.85 },
+  { n: "Scott", x: 9.35, y: 0.55, r: 0.7 },
+  { n: "Haworth", x: 4.2, y: 3.7, r: 1.1 },
+  { n: "Shoemaker", x: 6.9, y: 4.3, r: 1.0 },
+  { n: "Faustini", x: 8.5, y: 5.6, r: 0.9 },
+  { n: "Shackleton", x: 5.4, y: 6.3, r: 0.95 },
+  { n: "de Gerlache", x: 2.5, y: 6.3, r: 0.85 },
+  { n: "Sverdrup", x: 0.9, y: 7.25, r: 0.7 },
+  { n: "Slater", x: 9.0, y: 7.45, r: 0.55 },
+];
+const MASSIFS = [
+  { n: "Malapert Massif", x: 3.3, y: 1.6, r: 0.95, a: 0.48 },
+  { n: "Mons Mouton", x: 5.8, y: 1.7, r: 1.05, a: 0.43 },
+  { n: "Leibnitz β", x: 0.9, y: 4.4, r: 0.8, a: 0.38 },
+  { n: "Connecting Ridge", x: 6.8, y: 7.4, r: 0.7, a: 0.28 },
+];
+const EVENTS = [
+  { id: "calm", name: "Quiet sky", text: "No disruptions this round.", w: 3 },
+  { id: "window", name: "Launch window", text: "Outposts cost 2 less this round.", w: 2 },
+  { id: "shortage", name: "Supply shortage", text: "Power towers cost 2 more this round.", w: 2 },
+  { id: "storm", name: "Solar particle event", text: "Outposts with no power tower serving them produce half.", w: 2 },
+  { id: "survey", name: "Orbital survey release", text: "An orbiter publishes data on 3 tiles for everyone.", w: 2 },
+  { id: "strike", name: "Micrometeoroid strike", text: "One outpost without power-tower shielding produces nothing.", w: 1.5 },
+];
+
+function rand(S) {
+  let a = (S.rs = (S.rs + 0x6D2B79F5) | 0);
+  let t = Math.imul(a ^ (a >>> 15), 1 | a);
+  t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+  return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+}
+const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+const r1 = v => Math.round(v * 10) / 10;
+const pick = (S, arr) => arr[Math.floor(rand(S) * arr.length)];
+function weighted(S, entries) {
+  const tot = entries.reduce((s, e) => s + e[1], 0);
+  let x = rand(S) * tot;
+  for (const e of entries) { if ((x -= e[1]) <= 0) return e[0]; }
+  return entries[entries.length - 1][0];
+}
+const tileLabel = t => ROW_L[t.r] + (t.c + 1);
+
+// ---- Terrain: height field, baked low-sun lighting and permanent shadow ----
+const SUN = (() => { const x = -0.82, y = -0.57, l = Math.hypot(x, y); return { x: x / l, y: y / l, tanE: 0.3 }; })();
+
+function buildTerrain(seed) {
+  const R = { rs: (seed * 2654435761) | 0 };
+  const G = 64, nt = new Float32Array(G * G);
+  for (let i = 0; i < nt.length; i++) nt[i] = rand(R) * 2 - 1;
+  const sm = t => t * t * (3 - 2 * t);
+  const vn = (x, y) => {
+    const xi = Math.floor(x), yi = Math.floor(y), xf = sm(x - xi), yf = sm(y - yi);
+    const at = (i, j) => nt[(((j % G) + G) % G) * G + (((i % G) + G) % G)];
+    const a = at(xi, yi), b = at(xi + 1, yi), c = at(xi, yi + 1), d = at(xi + 1, yi + 1);
+    return a + (b - a) * xf + (c - a) * yf + (a - b - c + d) * xf * yf;
+  };
+  const fbm = (x, y) => (vn(x * 1.1, y * 1.1) * .26 + vn(x * 2.3 + 7, y * 2.3 + 3) * .12 + vn(x * 4.7 + 1, y * 4.7 + 9) * .05 + vn(x * 9.3 + 5, y * 9.3) * .022) * .35;
+  const craters = CRATERS.map(f => ({ ...f, x: f.x + (rand(R) - .5) * .25, y: f.y + (rand(R) - .5) * .25 }));
+  for (let i = 0; i < 56; i++) craters.push({ x: rand(R) * COLS, y: rand(R) * ROWS, r: 0.08 + Math.pow(rand(R), 2.3) * 0.5 });
+  for (const c of craters) { c.depth = c.r * 0.6; c.rim = c.r * 0.17; }
+
+  const H = new Float32Array(TW * TH);
+  for (let py = 0; py < TH; py++) {
+    const y = (py + .5) / HR;
+    for (let px = 0; px < TW; px++) {
+      const x = (px + .5) / HR;
+      let h = fbm(x, y);
+      for (const m of MASSIFS) { const dx = x - m.x, dy = y - m.y; h += m.a * Math.exp(-(dx * dx + dy * dy) / (m.r * m.r)); }
+      for (const c of craters) {
+        const dx = x - c.x, dy = y - c.y, lim = c.r * 1.8;
+        if (dx > lim || dx < -lim || dy > lim || dy < -lim) continue;
+        const d = Math.sqrt(dx * dx + dy * dy) / c.r;
+        if (d < 1) h -= c.depth * (1 - Math.pow(d, 2.6));
+        const e = (d - 1) / 0.3;
+        h += c.rim * Math.exp(-e * e);
+      }
+      H[py * TW + px] = h;
+    }
+  }
+  const hAt = (px, py) => H[clamp(py, 0, TH - 1) * TW + clamp(px, 0, TW - 1)];
+  const shadow = new Uint8Array(TW * TH), lum = new Float32Array(TW * TH);
+  const L = { x: SUN.x, y: SUN.y, z: SUN.tanE }, ll = Math.hypot(L.x, L.y, L.z);
+  L.x /= ll; L.y /= ll; L.z /= ll;
+  for (let py = 0; py < TH; py++) {
+    for (let px = 0; px < TW; px++) {
+      const i = py * TW + px, h0 = H[i];
+      let sh = 0;
+      for (let k = 2; k <= 150; k += 2) {
+        const sx = Math.round(px + SUN.x * k), sy = Math.round(py + SUN.y * k);
+        if (sx < 0 || sy < 0 || sx >= TW || sy >= TH) break;
+        if (H[sy * TW + sx] > h0 + SUN.tanE * k / HR) { sh = 1; break; }
+      }
+      shadow[i] = sh;
+      const gx = (hAt(px + 1, py) - hAt(px - 1, py)) * HR / 2, gy = (hAt(px, py + 1) - hAt(px, py - 1)) * HR / 2;
+      const nl = Math.hypot(gx, gy, 1);
+      const dot = (-gx * L.x - gy * L.y + L.z) / nl;
+      lum[i] = sh ? 0 : Math.max(0, dot) / L.z;
+    }
+  }
+  const stats = [];
+  for (let r = 0; r < ROWS; r++) for (let c = 0; c < COLS; c++) {
+    let n = 0, sf = 0, sh = 0, sl = 0;
+    for (let py = r * HR + 1; py < (r + 1) * HR; py += 3) for (let px = c * HR + 1; px < (c + 1) * HR; px += 3) {
+      const i = py * TW + px; n++; sf += shadow[i]; sh += H[i];
+      sl += Math.abs(hAt(px + 1, py) - hAt(px - 1, py)) + Math.abs(hAt(px, py + 1) - hAt(px, py - 1));
+    }
+    stats.push({ shadow: sf / n, height: sh / n, slope: sl / n * HR });
+  }
+  let hMin = Infinity, hMax = -Infinity;
+  for (let i = 0; i < H.length; i++) { if (H[i] < hMin) hMin = H[i]; if (H[i] > hMax) hMax = H[i]; }
+  return { H, shadow, lum, stats, craters, hMin, hMax, fbm };
+}
+
+// ---- Game state ----
+function newGame(opts, terrain) {
+  const seed = opts.seed >>> 0;
+  const S = {
+    seed, rs: seed ^ 0x9e3779b9, rounds: opts.rounds || 10, round: 0, phase: "setup",
+    pool: 0, event: EVENTS[0], order: [0, 1, 2, 3], fi: 0, ti: 0, actionsLeft: 2,
+    consMask: 0, log: [], history: [], modeHistory: [], lastModeReturn: null, strikeTile: -1, over: null,
+    players: PLAYER_DEFS.map((d, i) => ({
+      id: i, name: d.name, short: d.short, color: d.color, persona: opts.personas ? opts.personas[i] : d.persona,
+      human: !!(opts.humans && opts.humans[i]), credits: 12, mode: null, eff: null, lastNet: 0, earned: 0, lost: 0,
+    })),
+    tiles: [],
+  };
+  const st = terrain.stats;
+  const byH = st.map((s, i) => i).sort((a, b) => st[b].height - st[a].height);
+  const hRank = []; byH.forEach((ti, k) => hRank[ti] = k / (byH.length - 1));
+  const bySh = st.map((s, i) => i).sort((a, b) => st[b].shadow - st[a].shadow);
+  const shRank = []; bySh.forEach((ti, k) => shRank[ti] = k / (bySh.length - 1));
+  const bySl = st.map((s, i) => i).sort((a, b) => st[b].slope - st[a].slope);
+  const rough = new Set(bySl.slice(0, Math.round(st.length * 0.24)));
+  for (let r = 0; r < ROWS; r++) for (let c = 0; c < COLS; c++) {
+    const id = r * COLS + c, s = st[id];
+    let ice = shRank[id] < .12 ? 3 : shRank[id] < .3 ? 2 : shRank[id] < .55 ? 1 : 0;
+    let sun = hRank[id] < .12 ? 3 : hRank[id] < .3 ? 2 : hRank[id] < .6 ? 1 : 0;
+    if (shRank[id] < .2) sun = Math.min(sun, 1);
+    if (rand(S) < .3) ice = clamp(ice + (rand(S) < .5 ? -1 : 1), 0, 3);
+    if (rand(S) < .25) sun = clamp(sun + (rand(S) < .5 ? -1 : 1), 0, 3);
+    S.tiles.push({ id, c, r, ice, sun, rough: rough.has(id), owner: -1, zone: false, infra: null, known: 0, prior: { shadow: 1 - shRank[id], frac: s.shadow, height: hRank[id] } });
+  }
+  S.order = [0, 1, 2, 3];
+  return S;
+}
+
+const P = (S, id) => S.players[id];
+const knows = (t, pid) => (t.known >> pid) & 1;
+const neighbors = (S, t) => S.tiles.filter(u => Math.abs(u.c - t.c) <= 1 && Math.abs(u.r - t.r) <= 1);
+// Outposts landed while operating alone declare a safety zone over the four bordering tiles.
+function zoneHolder(S, t, pid) {
+  for (const [dc, dr] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+    const c = t.c + dc, r = t.r + dr;
+    if (c < 0 || r < 0 || c >= COLS || r >= ROWS) continue;
+    const u = S.tiles[r * COLS + c];
+    if (u.owner >= 0 && u.owner !== pid && u.zone) return u.owner;
+  }
+  return -1;
+}
+const shareMask = (S, p) => p.eff === "commons" ? ALL : p.eff === "consortium" ? S.consMask : (1 << p.id);
+
+function log(S, pid, text) { S.log.push({ r: S.round, pid, text }); if (S.log.length > 200) S.log.shift(); }
+
+function towerBonus(S, t, owner) {
+  let b = 0;
+  for (const u of neighbors(S, t)) if (u.infra && (u.infra.mask >> owner) & 1) b++;
+  return Math.min(3, b);
+}
+function tileYield(S, t) {
+  if (t.owner < 0) return 0;
+  if (S.event.id === "strike" && S.strikeTile === t.id) return 0;
+  const bonus = towerBonus(S, t, t.owner);
+  let y = t.ice + t.sun;
+  if (S.event.id === "storm" && bonus === 0) y *= 0.5;
+  return y + bonus;
+}
+
+function actionCost(S, p, type) {
+  let c = COST[type];
+  if (S.event.id === "window" && type === "outpost") c -= 2;
+  if (S.event.id === "shortage" && type === "infra") c += 2;
+  if (p.eff === "consortium") c *= 0.75;
+  const subsidy = p.eff === "commons" ? Math.min(S.pool, c * 0.5) : 0;
+  return { gross: r1(c), subsidy: r1(subsidy), net: r1(c - subsidy) };
+}
+
+function canDo(S, p, type, t) {
+  const cost = actionCost(S, p, type);
+  if (p.credits < cost.net) return { ok: false, why: `Needs ${cost.net} credits.` };
+  if (!t) return { ok: true, cost };
+  if (type === "prospect") {
+    if (knows(t, p.id)) return { ok: false, why: "You already have this tile's data." };
+    return { ok: true, cost };
+  }
+  if (type === "outpost") {
+    if (t.owner >= 0) return { ok: false, why: "Another outpost already holds this tile." };
+    const z = zoneHolder(S, t, p.id);
+    if (z >= 0) return { ok: false, why: `Inside ${P(S, z).short}'s safety zone.` };
+    return { ok: true, cost, blind: !knows(t, p.id) };
+  }
+  if (type === "infra") {
+    if (t.owner !== p.id) return { ok: false, why: "Build towers on tiles you hold." };
+    if (t.infra) return { ok: false, why: "This tile already has a tower." };
+    return { ok: true, cost };
+  }
+  return { ok: false, why: "Unknown action." };
+}
+
+// Returns { ok, text, fx } where fx describes what the renderer should animate.
+function doAction(S, pid, type, tileId) {
+  const p = P(S, pid), t = S.tiles[tileId];
+  const chk = canDo(S, p, type, t);
+  if (!chk.ok) return { ok: false, text: chk.why };
+  p.credits = r1(p.credits - chk.cost.net);
+  S.pool = r1(S.pool - chk.cost.subsidy);
+  const sub = chk.cost.subsidy ? ` (commons paid ${chk.cost.subsidy})` : "";
+  let text, fx = { type, tile: tileId, pid };
+  if (type === "prospect") {
+    const mask = shareMask(S, p);
+    t.known |= mask | (1 << pid);
+    const who = p.eff === "commons" ? "published to all" : p.eff === "consortium" ? "shared with the consortium" : "kept private";
+    text = `surveyed ${tileLabel(t)}, data ${who}${sub}.`;
+  } else if (type === "outpost") {
+    if (chk.blind && t.rough && rand(S) < BLIND_FAIL) {
+      p.lost = r1(p.lost + chk.cost.net);
+      t.known |= (1 << pid);
+      text = `lost a lander on rough ground at ${tileLabel(t)}.`;
+      fx.failed = true;
+    } else {
+      t.owner = pid; t.known |= (1 << pid); t.zone = p.eff === "alone";
+      text = `landed an outpost at ${tileLabel(t)}${chk.blind ? " without survey data" : ""}${t.zone ? " and declared a safety zone" : ""}${sub}.`;
+    }
+  } else {
+    const scope = p.eff === "commons" ? "public" : p.eff === "consortium" ? "consortium" : "private";
+    t.infra = { owner: pid, scope, mask: scope === "public" ? ALL : scope === "consortium" ? S.consMask : (1 << pid) };
+    const who = scope === "public" ? "open to everyone" : scope === "consortium" ? "serving consortium members" : "for its own outposts";
+    text = `built a power tower at ${tileLabel(t)}, ${who}${sub}.`;
+  }
+  log(S, pid, text);
+  return { ok: true, text, fx };
+}
+
+function drawEvent(S) {
+  if (S.round === 1) return EVENTS[0];
+  return weighted(S, EVENTS.map(e => [e, e.w]));
+}
+
+function startRound(S) {
+  S.round++;
+  S.phase = "funding";
+  S.order = [0, 1, 2, 3].map(i => (i + S.round - 1) % 4);
+  S.fi = 0; S.ti = 0; S.actionsLeft = 2; S.strikeTile = -1;
+  for (const p of S.players) { p.mode = null; p.eff = null; }
+  S.event = drawEvent(S);
+  const fx = [];
+  if (S.event.id === "survey") {
+    const hidden = S.tiles.filter(t => t.known !== ALL);
+    for (let k = 0; k < 3 && hidden.length; k++) {
+      const t = hidden.splice(Math.floor(rand(S) * hidden.length), 1)[0];
+      t.known = ALL; fx.push(t.id);
+    }
+  }
+  log(S, -1, `Round ${S.round}: ${S.event.name}. ${S.event.text}`);
+  return fx;
+}
+
+function setMode(S, pid, mode) {
+  P(S, pid).mode = mode;
+  S.fi++;
+}
+
+function resolveModes(S) {
+  const cons = S.players.filter(p => p.mode === "consortium");
+  S.consMask = cons.length >= 2 ? cons.reduce((m, p) => m | (1 << p.id), 0) : 0;
+  for (const p of S.players) {
+    p.eff = p.mode === "consortium" && cons.length < 2 ? "alone" : p.mode;
+    if (p.mode === "consortium" && cons.length < 2) log(S, p.id, "found no consortium partners and operates alone this round.");
+  }
+  S.modeHistory.push(S.players.map(p => p.eff));
+  const summary = MODES.map(m => { const ps = S.players.filter(p => p.eff === m); return ps.length ? `${MODE_LABEL[m]}: ${ps.map(p => p.short).join(", ")}` : null; }).filter(Boolean).join(" · ");
+  log(S, -1, summary);
+  S.phase = "action"; S.ti = 0; S.actionsLeft = 2;
+}
+
+function bestRelayTile(S) {
+  let best = null, bs = 1;
+  for (const t of S.tiles) {
+    if (t.infra) continue;
+    // Site relays to serve as many different operators as possible, then the most outposts.
+    const ns = neighbors(S, t).filter(u => u.owner >= 0 && towerBonus(S, u, u.owner) < 3);
+    const s = new Set(ns.map(u => u.owner)).size * 1.5 + ns.length * .4;
+    if (s > bs) { bs = s; best = t; }
+  }
+  return best;
+}
+
+function produce(S) {
+  S.phase = "production";
+  if (S.event.id === "strike") {
+    const exposed = S.tiles.filter(t => t.owner >= 0 && towerBonus(S, t, t.owner) === 0);
+    if (exposed.length) { const t = pick(S, exposed); S.strikeTile = t.id; log(S, t.owner, `lost a round of output at ${tileLabel(t)} to a micrometeoroid strike.`); }
+  }
+  const gross = [0, 0, 0, 0], count = [0, 0, 0, 0], yields = [];
+  for (const t of S.tiles) if (t.owner >= 0) {
+    const y = tileYield(S, t);
+    gross[t.owner] += y; count[t.owner]++;
+    yields.push({ tile: t.id, pid: t.owner, y: r1(y) });
+  }
+  let pot = 0, poolAdd = 0;
+  const cons = S.players.filter(p => p.eff === "consortium");
+  const net = [0, 0, 0, 0];
+  for (const p of S.players) {
+    const g = gross[p.id], share = g * SHARE[p.eff];
+    if (p.eff === "consortium") pot += share; else if (p.eff === "commons") poolAdd += share;
+    net[p.id] = g - share - count[p.id] * UPKEEP;
+    p.earned = r1(p.earned + g);
+  }
+  for (const p of cons) net[p.id] += pot / cons.length;
+  for (const p of S.players) { p.credits = r1(p.credits + net[p.id]); p.lastNet = r1(net[p.id]); }
+  if (S.players.some(p => p.eff === "commons")) poolAdd += GRANT;
+  S.pool = r1(S.pool + poolAdd);
+  const relays = [];
+  while (S.pool >= RELAY_COST) {
+    const t = bestRelayTile(S);
+    if (!t) break;
+    t.infra = { owner: -1, scope: "public", mask: ALL };
+    S.pool = r1(S.pool - RELAY_COST);
+    relays.push(t.id);
+    log(S, -1, `The commons pool built a public relay tower at ${tileLabel(t)}.`);
+  }
+  const ret = {};
+  for (const m of MODES) { const ps = S.players.filter(p => p.eff === m); ret[m] = ps.length ? ps.reduce((s, p) => s + net[p.id], 0) / ps.length : null; }
+  S.lastModeReturn = ret;
+  const m = metrics(S);
+  S.history.push({ round: S.round, di: m.di, top: m.top, data: m.data });
+  log(S, -1, `Production: ${S.players.map(p => `${p.short} ${p.lastNet >= 0 ? "+" : ""}${p.lastNet}`).join(", ")}.`);
+  return { yields, relays };
+}
+
+function netWorth(S, p) {
+  const out = S.tiles.filter(t => t.owner === p.id).length;
+  const inf = S.tiles.filter(t => t.infra && t.infra.owner === p.id).length;
+  return r1(p.credits + out * 4 + inf * 5);
+}
+function diTarget(S) { return S.rounds * 5; }
+function metrics(S) {
+  const out = S.tiles.filter(t => t.owner >= 0).length;
+  const inf = S.tiles.filter(t => t.infra).length;
+  const surveyed = S.tiles.filter(t => t.known).length;
+  const open = S.tiles.filter(t => t.known === ALL).length;
+  const nw = S.players.map(p => Math.max(0, netWorth(S, p)));
+  const tot = nw.reduce((a, b) => a + b, 0) || 1;
+  const shares = nw.map(v => v / tot);
+  const top = Math.max(...shares);
+  const leader = shares.indexOf(top);
+  return { di: r1(out + inf * 2 + surveyed * .25), top, leader, data: open / S.tiles.length, out, inf, surveyed, open };
+}
+function outcome(S) {
+  const m = metrics(S);
+  let kind;
+  if (m.top > MONOPOLY_SHARE) kind = "monopoly";
+  else if (m.di < diTarget(S)) kind = "stagnation";
+  else kind = "growth";
+  return { kind, m };
+}
+
+// ---- AI ----
+function aiChooseMode(S, p) {
+  let w = { ...PERSONA_W[p.persona] };
+  if (p.persona === "adaptive" && S.lastModeReturn) {
+    const best = MODES.filter(m => S.lastModeReturn[m] != null).sort((a, b) => S.lastModeReturn[b] - S.lastModeReturn[a])[0];
+    if (best) w[best] += .9;
+  }
+  // Already-declared choices are visible: a consortium needs a partner.
+  const declared = S.players.filter(q => q.mode === "consortium").length;
+  const remaining = 4 - S.fi;
+  if (declared > 0) w.consortium += .25;
+  else if (remaining <= 1) w.consortium *= .2;
+  if (S.pool >= 4) w.commons += .1;
+  if (S.round === S.rounds) { w.alone += .2; }
+  return weighted(S, MODES.map(m => [m, w[m]]));
+}
+
+function aiPlan(S, p) {
+  const last = S.round === S.rounds, roundsLeft = S.rounds - S.round + 1;
+  const reserve = last ? 0 : 1;
+  const afford = type => p.credits - actionCost(S, p, type).net >= reserve && canDo(S, p, type, null).ok;
+  let best = null;
+  const consider = (score, type, t) => { if (!best || score > best.score) best = { score, type, tile: t.id }; };
+  const guess = t => t.prior.shadow * 2.6 + t.prior.height * 2.2;
+  let knownGood = 0;
+  if (afford("infra")) {
+    for (const t of S.tiles) {
+      if (t.owner !== p.id || t.infra) continue;
+      const served = neighbors(S, t).filter(u => u.owner === p.id && towerBonus(S, u, p.id) < 3).length;
+      if (served >= 2 && served * roundsLeft >= 4) consider(2.4 + served * 1.2, "infra", t);
+    }
+  }
+  const oc = actionCost(S, p, "outpost").net;
+  for (const t of S.tiles) {
+    if (t.owner >= 0 || zoneHolder(S, t, p.id) >= 0) continue;
+    if (knows(t, p.id)) {
+      const v = t.ice + t.sun + towerBonus(S, t, p.id) - UPKEEP;
+      if (v >= 2 && v * roundsLeft >= oc * .8) { knownGood++; if (afford("outpost")) consider(3 + v, "outpost", t); }
+    } else if (afford("outpost") && (p.persona === "extractor" || p.credits > 16) && roundsLeft >= 3) {
+      consider(guess(t) * .7 - .3, "outpost", t);
+    }
+  }
+  if (!last && afford("prospect") && roundsLeft >= 3) {
+    // Keep enough cash to land on what you find.
+    const keep = knownGood > 0 ? oc : 0;
+    if (p.credits - actionCost(S, p, "prospect").net >= keep) {
+      for (const t of S.tiles) {
+        if (t.owner >= 0 || knows(t, p.id) || zoneHolder(S, t, p.id) >= 0) continue;
+        const near = neighbors(S, t).some(u => u.owner === p.id) ? .4 : 0;
+        consider(1 + guess(t) * .35 + near + rand(S) * .3 - knownGood * .6, "prospect", t);
+      }
+    }
+  }
+  return best && best.score > 1 ? best : null;
+}
+// ===LOGIC-END===
+
+// ======================== Presentation ========================
+const $ = id => document.getElementById(id);
+const app = $("app");
+const reduceMotion = window.matchMedia && matchMedia("(prefers-reduced-motion: reduce)").matches;
+let S = null, T = null, terrainSeed = null;
+let setup = { humans: [true, false, false, false], rounds: 10, pace: "normal" };
+let armed = null, hoverTile = -1, selectTile = -1, viewer = 0, flow = 0, busy = false;
+const lastAction = {};
+let dirty = true;
+const invalidate = () => { dirty = true; };
+
+function later(fn, ms) {
+  const f = flow;
+  const d = setup.pace === "fast" ? ms * 0.35 : ms;
+  setTimeout(() => { if (f === flow) fn(); }, d);
+}
+
+// ---------- three.js scene ----------
+const canvas = $("scene");
+const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, powerPreference: "high-performance", preserveDrawingBuffer: false });
+renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+renderer.outputEncoding = THREE.sRGBEncoding;
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 1.05;
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+const scene = new THREE.Scene();
+scene.background = new THREE.Color("#060a14");
+scene.fog = new THREE.Fog("#060a14", 20, 42);
+const camera = new THREE.PerspectiveCamera(38, 1, 0.1, 160);
+
+scene.add(new THREE.HemisphereLight(0xe4ebff, 0x3a2614, 0.62));
+const key = new THREE.DirectionalLight(0xfff0da, 1.15);
+key.position.set(-6, 13, 7);
+key.castShadow = true;
+key.shadow.mapSize.set(2048, 2048);
+Object.assign(key.shadow.camera, { left: -10, right: 10, top: 10, bottom: -10, near: 1, far: 40 });
+key.shadow.bias = -0.0004;
+key.shadow.normalBias = 0.02;
+scene.add(key);
+const rim = new THREE.DirectionalLight(0x8fb2ff, 0.35);
+rim.position.set(8, 5, -9);
+scene.add(rim);
+
+function woodTexture() {
+  const c = document.createElement("canvas"); c.width = 1024; c.height = 1024;
+  const g = c.getContext("2d");
+  g.fillStyle = "#5a3620"; g.fillRect(0, 0, 1024, 1024);
+  const R = { rs: 1234 };
+  for (let y = 0; y < 1024; y += 2) {
+    const v = Math.sin(y * 0.021) * 0.5 + Math.sin(y * 0.0063 + 1.7) * 0.5;
+    g.fillStyle = `rgba(${v > 0 ? "30,16,6" : "150,96,58"},${Math.abs(v) * 0.16 + rand(R) * 0.05})`;
+    g.fillRect(0, y, 1024, 2);
+  }
+  for (let i = 0; i < 1400; i++) {
+    g.strokeStyle = `rgba(20,10,4,${rand(R) * 0.18})`;
+    g.lineWidth = rand(R) * 1.4;
+    const y = rand(R) * 1024, x = rand(R) * 1024;
+    g.beginPath(); g.moveTo(x, y); g.lineTo(x + 60 + rand(R) * 240, y + (rand(R) - .5) * 3); g.stroke();
+  }
+  for (let k = 0; k < 7; k++) g.fillRect(k * 146, 0, 2, 1024);
+  const t = new THREE.CanvasTexture(c);
+  t.wrapS = t.wrapT = THREE.RepeatWrapping; t.repeat.set(3, 3); t.encoding = THREE.sRGBEncoding;
+  t.anisotropy = renderer.capabilities.getMaxAnisotropy();
+  t.rotation = Math.PI / 2;
+  return t;
+}
+const table = new THREE.Mesh(new THREE.PlaneGeometry(60, 60), new THREE.MeshStandardMaterial({ map: woodTexture(), roughness: .62, metalness: 0 }));
+table.rotation.x = -Math.PI / 2; table.receiveShadow = true;
+scene.add(table);
+
+const paper = new THREE.Mesh(new THREE.BoxGeometry(10.8, 0.03, 8.8), new THREE.MeshStandardMaterial({ color: 0xe9e7df, roughness: .9 }));
+paper.position.y = 0.015; paper.receiveShadow = true; paper.castShadow = true;
+scene.add(paper);
+
+const BASE_Y = 0.045, RELIEF = 0.36;
+let VS = 1, terrainMesh = null, skirt = null, boardTex = null;
+
+function sampleH(cx, cy) {
+  const fx = clamp(cx * HR - .5, 0, TW - 1.001), fy = clamp(cy * HR - .5, 0, TH - 1.001);
+  const x0 = Math.floor(fx), y0 = Math.floor(fy), ax = fx - x0, ay = fy - y0;
+  const H = T.H, i = y0 * TW + x0;
+  return (H[i] * (1 - ax) + H[i + 1] * ax) * (1 - ay) + (H[i + TW] * (1 - ax) + H[i + TW + 1] * ax) * ay;
+}
+const worldY = (x, z) => BASE_Y + (sampleH(x + COLS / 2, z + ROWS / 2) - T.hMin) * VS;
+const tileCenter = t => new THREE.Vector3(t.c - COLS / 2 + .5, 0, t.r - ROWS / 2 + .5);
+function tileTop(t, pad = .32) {
+  let m = -Infinity;
+  const c = tileCenter(t);
+  for (let i = -2; i <= 2; i++) for (let j = -2; j <= 2; j++) m = Math.max(m, worldY(c.x + i * pad / 2, c.z + j * pad / 2));
+  return m;
+}
+
+function buildBoardTexture() {
+  const small = document.createElement("canvas"); small.width = TW; small.height = TH;
+  const sg = small.getContext("2d");
+  const img = sg.createImageData(TW, TH);
+  for (let py = 0; py < TH; py++) for (let px = 0; px < TW; px++) {
+    const i = py * TW + px, x = (px + .5) / HR, y = (py + .5) / HR;
+    const albedo = .66 + T.fbm(x * 6.1 + 3, y * 6.1) * .35;
+    const l = T.shadow[i] ? .035 + albedo * .02 : albedo * clamp(.1 + .5 * T.lum[i], 0, 1.18);
+    const v = clamp(Math.pow(l, 0.85) * 255, 0, 255);
+    img.data[i * 4] = v * .97; img.data[i * 4 + 1] = v * .98; img.data[i * 4 + 2] = v * 1.02 + 3; img.data[i * 4 + 3] = 255;
+  }
+  sg.putImageData(img, 0, 0);
+  const K = 2.5, c = document.createElement("canvas"); c.width = TW * K; c.height = TH * K;
+  const g = c.getContext("2d");
+  g.imageSmoothingEnabled = true; g.imageSmoothingQuality = "high";
+  g.drawImage(small, 0, 0, c.width, c.height);
+  const cell = HR * K;
+  g.strokeStyle = "rgba(96,156,240,.9)"; g.lineWidth = 2.2;
+  for (let cx = 0; cx <= COLS; cx++) { g.beginPath(); g.moveTo(cx * cell, 0); g.lineTo(cx * cell, c.height); g.stroke(); }
+  for (let cy = 0; cy <= ROWS; cy++) { g.beginPath(); g.moveTo(0, cy * cell); g.lineTo(c.width, cy * cell); g.stroke(); }
+  g.font = "500 17px 'IBM Plex Mono', monospace";
+  g.textBaseline = "top";
+  for (let r = 0; r < ROWS; r++) for (let cc = 0; cc < COLS; cc++) {
+    const s = ROW_L[r] + (cc + 1);
+    g.fillStyle = "rgba(0,0,0,.55)"; g.fillRect(cc * cell + 6, r * cell + 6, g.measureText(s).width + 8, 22);
+    g.fillStyle = "rgba(255,255,255,.82)"; g.fillText(s, cc * cell + 10, r * cell + 9);
+  }
+  g.font = "italic 500 19px 'IBM Plex Sans', sans-serif";
+  g.textAlign = "center"; g.textBaseline = "middle";
+  const names = T.craters.filter(k => k.n).map(k => ({ n: k.n, x: k.x, y: k.y + k.r * .15 }))
+    .concat(MASSIFS.map(m => ({ n: m.n, x: m.x, y: m.y + .1 })));
+  for (const k of names) {
+    g.fillStyle = "rgba(0,0,0,.5)"; g.fillText(k.n, k.x * cell + 1, k.y * cell + 1);
+    g.fillStyle = "rgba(255,255,255,.72)"; g.fillText(k.n, k.x * cell, k.y * cell);
+  }
+  const t = new THREE.CanvasTexture(c);
+  t.encoding = THREE.sRGBEncoding; t.anisotropy = renderer.capabilities.getMaxAnisotropy();
+  return t;
+}
+
+function buildTerrainMesh() {
+  invalidate();
+  if (terrainMesh) { scene.remove(terrainMesh); terrainMesh.geometry.dispose(); terrainMesh.material.map.dispose(); }
+  if (skirt) { scene.remove(skirt); skirt.geometry.dispose(); }
+  VS = RELIEF / (T.hMax - T.hMin);
+  const geo = new THREE.PlaneGeometry(COLS, ROWS, COLS * 24, ROWS * 24);
+  geo.rotateX(-Math.PI / 2);
+  const pos = geo.attributes.position;
+  for (let i = 0; i < pos.count; i++) pos.setY(i, worldY(pos.getX(i), pos.getZ(i)));
+  geo.computeVertexNormals();
+  boardTex = buildBoardTexture();
+  terrainMesh = new THREE.Mesh(geo, new THREE.MeshStandardMaterial({ map: boardTex, roughness: .93, metalness: 0 }));
+  terrainMesh.receiveShadow = true; terrainMesh.castShadow = true;
+  scene.add(terrainMesh);
+  // Skirt so the relief reads as a solid slab from low angles.
+  const verts = [], N = 120, edges = [
+    [[-5, -4], [5, -4]], [[5, -4], [5, 4]], [[5, 4], [-5, 4]], [[-5, 4], [-5, -4]],
+  ];
+  for (const [[ax, az], [bx, bz]] of edges) for (let i = 0; i < N; i++) {
+    const p0 = [ax + (bx - ax) * i / N, az + (bz - az) * i / N], p1 = [ax + (bx - ax) * (i + 1) / N, az + (bz - az) * (i + 1) / N];
+    const e = .0005, y0 = worldY(clamp(p0[0], -5 + e, 5 - e), clamp(p0[1], -4 + e, 4 - e)), y1 = worldY(clamp(p1[0], -5 + e, 5 - e), clamp(p1[1], -4 + e, 4 - e));
+    verts.push(p0[0], 0.03, p0[1], p1[0], 0.03, p1[1], p1[0], y1, p1[1], p0[0], 0.03, p0[1], p1[0], y1, p1[1], p0[0], y0, p0[1]);
+  }
+  const sg = new THREE.BufferGeometry();
+  sg.setAttribute("position", new THREE.Float32BufferAttribute(verts, 3));
+  sg.computeVertexNormals();
+  skirt = new THREE.Mesh(sg, new THREE.MeshStandardMaterial({ color: 0x3d4250, roughness: .9, side: THREE.DoubleSide }));
+  scene.add(skirt);
+}
+
+// Pieces
+const pawnGeo = (() => {
+  const pts = [[0, 0], [.17, 0], [.175, .03], [.13, .065], [.075, .15], [.058, .25], [.1, .29], [.1, .305], [.062, .33], [.085, .38], [.095, .44], [.08, .5], [.045, .535], [0, .545]].map(p => new THREE.Vector2(p[0], p[1]));
+  return new THREE.LatheGeometry(pts, 28);
+})();
+const discGeo = new THREE.CylinderGeometry(.25, .25, .07, 40);
+const ringGeo = new THREE.TorusGeometry(.2, .018, 8, 36);
+const zoneGeo = new THREE.RingGeometry(.3, .36, 4, 1, Math.PI / 4);
+const zoneMat = PLAYER_DEFS.map(d => new THREE.MeshBasicMaterial({ color: d.color, transparent: true, opacity: .85, side: THREE.DoubleSide }));
+const chipGeo = new THREE.CylinderGeometry(.22, .22, .045, 32);
+const plastic = hex => new THREE.MeshStandardMaterial({ color: new THREE.Color(hex), roughness: .32, metalness: .02 });
+const playerMat = PLAYER_DEFS.map(d => plastic(d.color));
+const whiteMat = plastic("#f1f1ee");
+const goldMat = new THREE.MeshStandardMaterial({ color: 0xd9a441, roughness: .3, metalness: .75 });
+const pieces = new Map();
+const anims = [];
+
+function addAnim(obj, y, delay = 0) {
+  if (reduceMotion) { obj.position.y = y; return; }
+  obj.position.y = y + 2.2;
+  anims.push({ kind: "drop", obj, y, t0: performance.now() + delay, dur: 520 });
+}
+function syncPieces(animate) {
+  invalidate();
+  const want = new Set();
+  for (const t of S.tiles) {
+    const c = tileCenter(t);
+    if (t.infra) {
+      const k = "i" + t.id; want.add(k);
+      if (!pieces.has(k)) {
+        const g = new THREE.Group();
+        const d = new THREE.Mesh(discGeo, t.infra.owner < 0 || t.infra.scope === "public" && t.infra.owner < 0 ? whiteMat : playerMat[t.infra.owner]);
+        d.castShadow = d.receiveShadow = true; g.add(d);
+        if (t.infra.scope === "consortium") { const r = new THREE.Mesh(ringGeo, goldMat); r.rotation.x = Math.PI / 2; r.position.y = .037; g.add(r); }
+        if (t.infra.scope === "public" && t.infra.owner >= 0) { const r = new THREE.Mesh(ringGeo, whiteMat); r.rotation.x = Math.PI / 2; r.position.y = .037; g.add(r); }
+        const y = tileTop(t, .5) + .035;
+        g.position.set(c.x, y, c.z);
+        scene.add(g); pieces.set(k, g);
+        if (animate) addAnim(g, y);
+      }
+    }
+    if (t.owner >= 0) {
+      const k = "o" + t.id; want.add(k);
+      const baseY = tileTop(t, .5) + (t.infra ? .07 : 0);
+      if (!pieces.has(k)) {
+        const m = new THREE.Mesh(pawnGeo, playerMat[t.owner]);
+        m.castShadow = true; m.scale.setScalar(1.05);
+        if (t.zone) {
+          const z = new THREE.Mesh(zoneGeo, zoneMat[t.owner]);
+          z.rotation.x = -Math.PI / 2; z.position.y = .012; m.add(z);
+        }
+        m.position.set(c.x + (t.infra ? 0 : .06), baseY, c.z + (t.infra ? 0 : .08));
+        scene.add(m); pieces.set(k, m);
+        if (animate) addAnim(m, baseY, 60);
+      } else {
+        pieces.get(k).position.y = baseY;
+        pieces.get(k).position.x = c.x + (t.infra ? 0 : .06);
+        pieces.get(k).position.z = c.z + (t.infra ? 0 : .08);
+      }
+    }
+  }
+  for (const [k, o] of pieces) if (!want.has(k)) { scene.remove(o); pieces.delete(k); }
+}
+
+// Survey cards: small grey cards like the printed data tiles in the physical game.
+const cardTexCache = new Map();
+function cardTexture(t) {
+  const key = `${t.ice}-${t.sun}-${t.rough ? 1 : 0}`;
+  if (cardTexCache.has(key)) return cardTexCache.get(key);
+  const c = document.createElement("canvas"); c.width = c.height = 128;
+  const g = c.getContext("2d");
+  g.fillStyle = "#b9bcc2"; g.fillRect(0, 0, 128, 128);
+  g.strokeStyle = "#8d9097"; g.lineWidth = 4; g.strokeRect(2, 2, 124, 124);
+  const dots = (n, y, col) => { for (let i = 0; i < 3; i++) { g.beginPath(); g.arc(28 + i * 36, y, 12, 0, Math.PI * 2); g.fillStyle = i < n ? col : "rgba(0,0,0,.14)"; g.fill(); } };
+  dots(t.ice, 38, "#1c7fb0");
+  dots(t.sun, 84, "#c98410");
+  if (t.rough) { g.fillStyle = "#c2303f"; g.beginPath(); g.moveTo(128, 90); g.lineTo(128, 128); g.lineTo(90, 128); g.fill(); }
+  const tex = new THREE.CanvasTexture(c); tex.encoding = THREE.sRGBEncoding;
+  cardTexCache.set(key, tex);
+  return tex;
+}
+const cardGeo = new THREE.BoxGeometry(.32, .014, .32);
+const cardSide = new THREE.MeshStandardMaterial({ color: 0x9da0a6, roughness: .8 });
+const cards = new Map();
+function syncCards(animate) {
+  invalidate();
+  const want = new Set();
+  for (const t of S.tiles) {
+    if (!knows(t, viewer)) continue;
+    const k = t.id; want.add(k);
+    if (cards.has(k)) continue;
+    const top = new THREE.MeshStandardMaterial({ map: cardTexture(t), roughness: .75 });
+    const m = new THREE.Mesh(cardGeo, [cardSide, cardSide, top, cardSide, cardSide, cardSide]);
+    const c = tileCenter(t);
+    const cx = c.x - .29, cz = c.z - .29;
+    let y = -Infinity;
+    for (let i = -1; i <= 1; i++) for (let j = -1; j <= 1; j++) y = Math.max(y, worldY(cx + i * .16, cz + j * .16));
+    m.position.set(cx, y + .012, cz);
+    m.castShadow = true; m.receiveShadow = true;
+    scene.add(m); cards.set(k, m);
+    if (animate) addAnim(m, y + .012);
+  }
+  for (const [k, o] of cards) if (!want.has(k)) { scene.remove(o); o.material[2].dispose(); cards.delete(k); }
+}
+
+// Credit stacks beside the board, one per operator plus the commons pool.
+const stacks = [];
+function buildStacks() {
+  for (const s of stacks) scene.remove(s.mesh);
+  stacks.length = 0;
+  const mats = [...playerMat, whiteMat];
+  const xs = [-3.3, -1.1, 1.1, 3.3, -6.3];
+  const zs = [-4.9, -4.9, -4.9, -4.9, -3.2];
+  for (let i = 0; i < 5; i++) {
+    const inst = new THREE.InstancedMesh(chipGeo, mats[i], 40);
+    inst.castShadow = true; inst.receiveShadow = true; inst.count = 0;
+    scene.add(inst);
+    stacks.push({ mesh: inst, x: xs[i], z: zs[i] });
+  }
+}
+const _m4 = new THREE.Matrix4();
+function syncStacks() {
+  invalidate();
+  const vals = [...S.players.map(p => p.credits), S.pool];
+  vals.forEach((v, i) => {
+    const s = stacks[i], n = clamp(Math.round(Math.max(0, v) / 2), 0, 40);
+    for (let k = 0; k < n; k++) {
+      const col = Math.floor(k / 20), h = k % 20;
+      _m4.makeRotationY(k * .7);
+      _m4.setPosition(s.x + col * .5, .025 + h * .047, s.z + (h % 2 ? .01 : -.01));
+      s.mesh.setMatrixAt(k, _m4);
+    }
+    s.mesh.count = n; s.mesh.instanceMatrix.needsUpdate = true;
+  });
+}
+
+// Hover / selection highlight that hugs the terrain.
+const HL_SEG = 16;
+const hlGeo = new THREE.PlaneGeometry(1, 1, HL_SEG, HL_SEG); hlGeo.rotateX(-Math.PI / 2);
+const hlMat = new THREE.MeshBasicMaterial({ color: 0xf2b64b, transparent: true, opacity: .22, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -4 });
+const hl = new THREE.Mesh(hlGeo, hlMat); hl.visible = false; hl.renderOrder = 2; scene.add(hl);
+const edgeGeo = new THREE.BufferGeometry();
+edgeGeo.setAttribute("position", new THREE.Float32BufferAttribute(new Float32Array((HL_SEG * 4 + 1) * 3), 3));
+const edge = new THREE.Line(edgeGeo, new THREE.LineBasicMaterial({ color: 0xf2b64b })); edge.visible = false; scene.add(edge);
+const hlBase = hlGeo.attributes.position.array.slice();
+function placeHighlight(tileId, color) {
+  invalidate();
+  if (tileId < 0 || !T) { hl.visible = edge.visible = false; return; }
+  const t = S.tiles[tileId], c = tileCenter(t);
+  const pos = hlGeo.attributes.position;
+  for (let i = 0; i < pos.count; i++) {
+    const x = hlBase[i * 3] + c.x, z = hlBase[i * 3 + 2] + c.z;
+    pos.setXYZ(i, hlBase[i * 3], worldY(clamp(x, -4.999, 4.999), clamp(z, -3.999, 3.999)) + .012, hlBase[i * 3 + 2]);
+  }
+  pos.needsUpdate = true;
+  hl.position.set(c.x, 0, c.z);
+  const ep = edgeGeo.attributes.position, pts = [];
+  const corners = [[-.5, -.5], [.5, -.5], [.5, .5], [-.5, .5]];
+  for (let s = 0; s < 4; s++) { const [ax, az] = corners[s], [bx, bz] = corners[(s + 1) % 4]; for (let k = 0; k < HL_SEG; k++) pts.push([ax + (bx - ax) * k / HL_SEG, az + (bz - az) * k / HL_SEG]); }
+  pts.push(corners[0]);
+  pts.forEach(([x, z], i) => ep.setXYZ(i, c.x + x, worldY(clamp(c.x + x, -4.999, 4.999), clamp(c.z + z, -3.999, 3.999)) + .02, c.z + z));
+  ep.needsUpdate = true; edgeGeo.computeBoundingSphere();
+  hlMat.color.set(color); edge.material.color.set(color);
+  hl.visible = edge.visible = true;
+}
+
+// Survey ring pulse
+function ringPulse(tileId, color) {
+  const t = S.tiles[tileId], c = tileCenter(t);
+  const m = new THREE.Mesh(new THREE.RingGeometry(.2, .26, 48), new THREE.MeshBasicMaterial({ color, transparent: true, opacity: .9, depthWrite: false, side: THREE.DoubleSide }));
+  m.rotation.x = -Math.PI / 2; m.position.set(c.x, tileTop(t, .9) + .05, c.z);
+  scene.add(m);
+  if (reduceMotion) { setTimeout(() => { scene.remove(m); m.geometry.dispose(); }, 600); return; }
+  anims.push({ kind: "ring", obj: m, t0: performance.now(), dur: 900 });
+}
+
+// ---------- Camera ----------
+const camState = { theta: 0, phi: .78, r: 15, target: new THREE.Vector3(0, 0, .2) };
+let layoutOffset = { x: 0, y: 0 };
+function resetView() {
+  // Fit the board into the part of the screen the panels leave free.
+  const w = app.clientWidth, h = app.clientHeight, wide = w > 820;
+  const freeW = wide ? w - document.querySelector(".col.left").offsetWidth - document.querySelector(".col.right").offsetWidth - 64 : w - 24;
+  const freeH = wide ? h - 90 : h - document.querySelector(".col.right").offsetHeight - 120;
+  camState.theta = 0; camState.phi = wide ? .8 : .66;
+  const tv = Math.tan(THREE.MathUtils.degToRad(camera.fov / 2)), th = tv * w / h;
+  const needW = 7.3 / (th * clamp(freeW / w, .3, 1));
+  const needH = (5 * Math.cos(camState.phi) + 1.3 * Math.sin(camState.phi) + .8) / (tv * clamp(freeH / h, .3, 1));
+  camState.r = clamp(Math.max(needW, needH), 9, 56);
+  camState.target.set(0, 0, .15);
+  updateCamera();
+}
+function updateCamera() {
+  const { theta, phi, r, target } = camState;
+  camera.position.set(target.x + r * Math.sin(phi) * Math.sin(theta), target.y + r * Math.cos(phi), target.z + r * Math.sin(phi) * Math.cos(theta));
+  camera.lookAt(target);
+  scene.fog.near = r + 6; scene.fog.far = r + 34;
+  invalidate();
+}
+
+function resize() {
+  const w = app.clientWidth, h = app.clientHeight;
+  renderer.setSize(w, h, false);
+  camera.aspect = w / h;
+  if (w > 820) {
+    const lw = document.querySelector(".col.left").offsetWidth + 16, rw = document.querySelector(".col.right").offsetWidth + 16;
+    layoutOffset = { x: (rw - lw) / 2, y: 0 };
+  } else {
+    const sheet = document.querySelector(".col.right").offsetHeight, top = 110;
+    layoutOffset = { x: 0, y: (sheet - top) / 2 };
+  }
+  camera.setViewOffset(w, h, layoutOffset.x, layoutOffset.y, w, h);
+  camera.updateProjectionMatrix();
+  invalidate();
+}
+
+const pointers = new Map();
+let gesture = null;
+canvas.addEventListener("contextmenu", e => e.preventDefault());
+canvas.addEventListener("pointerdown", e => {
+  canvas.setPointerCapture(e.pointerId);
+  pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+  gesture = { x0: e.clientX, y0: e.clientY, t0: performance.now(), moved: 0, pan: e.button === 2 || e.shiftKey, type: e.pointerType, multi: pointers.size > 1 };
+  if (pointers.size > 1) gesture.multi = true;
+});
+canvas.addEventListener("pointermove", e => {
+  if (!pointers.has(e.pointerId)) { if (e.pointerType === "mouse") hoverAt(e.clientX, e.clientY); return; }
+  const prev = pointers.get(e.pointerId);
+  const dx = e.clientX - prev.x, dy = e.clientY - prev.y;
+  if (pointers.size === 1) {
+    gesture.moved += Math.abs(dx) + Math.abs(dy);
+    if (gesture.pan) panBy(dx, dy);
+    else { camState.theta -= dx * .006; camState.phi = clamp(camState.phi - dy * .005, .12, 1.36); }
+  } else if (pointers.size === 2) {
+    const [a, b] = [...pointers.entries()];
+    const other = a[0] === e.pointerId ? b[1] : a[1];
+    const d0 = Math.hypot(prev.x - other.x, prev.y - other.y), d1 = Math.hypot(e.clientX - other.x, e.clientY - other.y);
+    if (d0 > 0) camState.r = clamp(camState.r * d0 / d1, 5, 60);
+    panBy(dx / 2, dy / 2);
+    gesture.moved += 100;
+  }
+  pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+  updateCamera();
+});
+function endPointer(e) {
+  if (!pointers.has(e.pointerId)) return;
+  pointers.delete(e.pointerId);
+  if (gesture && pointers.size === 0) {
+    if (!gesture.multi && gesture.moved < 7 && performance.now() - gesture.t0 < 600) tapAt(e.clientX, e.clientY, gesture.type);
+    gesture = null;
+  }
+}
+canvas.addEventListener("pointerup", endPointer);
+canvas.addEventListener("pointercancel", endPointer);
+canvas.addEventListener("pointerleave", e => { if (e.pointerType === "mouse" && !pointers.size) { hoverTile = -1; refreshHighlight(); renderInspector(); } });
+canvas.addEventListener("wheel", e => { e.preventDefault(); camState.r = clamp(camState.r * Math.exp(e.deltaY * .0012), 5, 60); updateCamera(); }, { passive: false });
+function panBy(dx, dy) {
+  const k = camState.r * .0016;
+  const right = new THREE.Vector3(Math.cos(camState.theta), 0, -Math.sin(camState.theta));
+  const fwd = new THREE.Vector3(Math.sin(camState.theta), 0, Math.cos(camState.theta));
+  camState.target.addScaledVector(right, -dx * k).addScaledVector(fwd, -dy * k);
+  camState.target.x = clamp(camState.target.x, -7, 7); camState.target.z = clamp(camState.target.z, -6, 6);
+}
+window.addEventListener("keydown", e => {
+  if (e.target.closest && e.target.closest("input,textarea")) return;
+  if (e.key === "r" || e.key === "R") resetView();
+  else if (e.key === "Escape") { if (!$("helpModal").hidden) $("helpModal").hidden = true; else { armed = null; selectTile = -1; renderControl(); refreshHighlight(); renderInspector(); } }
+  else if (e.key === "ArrowLeft") { camState.theta += .08; updateCamera(); }
+  else if (e.key === "ArrowRight") { camState.theta -= .08; updateCamera(); }
+  else if (e.key === "ArrowUp") { camState.phi = clamp(camState.phi - .06, .12, 1.36); updateCamera(); }
+  else if (e.key === "ArrowDown") { camState.phi = clamp(camState.phi + .06, .12, 1.36); updateCamera(); }
+});
+
+const ray = new THREE.Raycaster(), ndc = new THREE.Vector2();
+function pickTile(x, y) {
+  if (!terrainMesh) return -1;
+  const r = canvas.getBoundingClientRect();
+  ndc.set(((x - r.left) / r.width) * 2 - 1, -((y - r.top) / r.height) * 2 + 1);
+  ray.setFromCamera(ndc, camera);
+  const hit = ray.intersectObject(terrainMesh)[0];
+  if (!hit) return -1;
+  const c = Math.floor(hit.point.x + COLS / 2), rr = Math.floor(hit.point.z + ROWS / 2);
+  if (c < 0 || c >= COLS || rr < 0 || rr >= ROWS) return -1;
+  return rr * COLS + c;
+}
+function hoverAt(x, y) {
+  const t = pickTile(x, y);
+  if (t !== hoverTile) { hoverTile = t; refreshHighlight(); renderInspector(); }
+}
+function tapAt(x, y, type) {
+  const t = pickTile(x, y);
+  if (t < 0) { selectTile = -1; refreshHighlight(); renderInspector(); return; }
+  if (armed && type === "mouse") { tryAction(t); return; }
+  selectTile = t; refreshHighlight(); renderInspector();
+}
+function refreshHighlight() {
+  const t = hoverTile >= 0 ? hoverTile : selectTile;
+  if (t < 0 || !S) { placeHighlight(-1); return; }
+  let color = "#f2b64b";
+  if (armed && humanActing()) color = canDo(S, P(S, currentPid()), armed, S.tiles[t]).ok ? "#4dc48c" : "#e8586d";
+  placeHighlight(t, color);
+}
+
+// ---------- Render loop ----------
+const _v = new THREE.Vector3();
+function frame(now) {
+  for (let i = anims.length - 1; i >= 0; i--) {
+    const a = anims[i], k = clamp((now - a.t0) / a.dur, 0, 1);
+    if (now < a.t0) continue;
+    if (a.kind === "drop") {
+      const e = 1 - Math.pow(1 - k, 3);
+      const bounce = k > .75 ? Math.sin((k - .75) / .25 * Math.PI) * .05 : 0;
+      a.obj.position.y = a.y + 2.2 * (1 - e) + bounce;
+    } else if (a.kind === "ring") {
+      a.obj.scale.setScalar(1 + k * 2.4); a.obj.material.opacity = .9 * (1 - k);
+      if (k >= 1) { scene.remove(a.obj); a.obj.geometry.dispose(); a.obj.material.dispose(); }
+    }
+    if (k >= 1) { if (a.kind === "drop") a.obj.position.y = a.y; anims.splice(i, 1); }
+  }
+  if (dirty || anims.length) { renderer.render(scene, camera); dirty = false; }
+  requestAnimationFrame(frame);
+}
+
+function floatText(tileId, text, color) {
+  const t = S.tiles[tileId], c = tileCenter(t);
+  _v.set(c.x, tileTop(t, .5) + .65, c.z).project(camera);
+  if (_v.z > 1) return;
+  const r = canvas.getBoundingClientRect();
+  const el = document.createElement("div");
+  el.className = "floater"; el.textContent = text; el.style.color = color; el.style.borderColor = color;
+  el.style.left = ((_v.x + 1) / 2 * r.width) + "px"; el.style.top = ((1 - _v.y) / 2 * r.height) + "px";
+  $("floaters").appendChild(el);
+  setTimeout(() => el.remove(), 1700);
+}
+
+// ---------- UI ----------
+const esc = s => String(s).replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+const currentPid = () => S.phase === "funding" ? S.order[S.fi] : S.order[S.ti];
+const humanActing = () => !!S && (S.phase === "funding" || S.phase === "action") && currentPid() != null && P(S, currentPid()).human;
+const modeChip = m => m ? `<span class="mode ${m}">${MODE_LABEL[m]}</span>` : `<span class="mode">Deciding</span>`;
+
+function renderTop() {
+  $("roundChip").textContent = `${Math.max(1, S.round)} / ${S.rounds}`;
+  const ph = { funding: "Funding decisions", action: "Operations", production: "Production", over: "Final assessment", setup: "Setup" }[S.phase];
+  $("phaseChip").textContent = ph;
+  $("eventChip").innerHTML = `<span class="eyebrow">Event</span> ${esc(S.event.name)}`;
+  $("eventChip").title = S.event.text;
+}
+function renderPlayers() {
+  const cur = S.phase === "funding" || S.phase === "action" ? currentPid() : -1;
+  $("players").innerHTML = S.players.map(p => {
+    const outs = S.tiles.filter(t => t.owner === p.id).length, inf = S.tiles.filter(t => t.infra && t.infra.owner === p.id).length;
+    const shown = S.phase === "funding" ? (p.mode ? modeChip(p.mode) : modeChip(null)) : modeChip(p.eff);
+    return `<div class="pcard ${p.id === cur ? "active" : ""}">
+      <span class="pdot" style="background:${p.color}"></span>
+      <span class="pname">${esc(p.short)}<em>${p.human ? "You" : "AI"}</em></span>
+      <span class="pcred ${p.credits < 0 ? "neg" : ""}" title="Credits">${p.credits.toFixed(1)}</span>
+      <span class="pmeta">${shown}<span title="Outposts">▲ ${outs}</span><span title="Power towers">● ${inf}</span><span class="extra" title="Net worth">NW ${netWorth(S, p).toFixed(0)}</span></span>
+    </div>`;
+  }).join("") + `<div class="pcard"><span class="pdot" style="background:#f1f1ee"></span><span class="pname">Commons pool</span><span class="pcred">${S.pool.toFixed(1)}</span><span class="pmeta">Builds a public relay at ${RELAY_COST}</span></div>`;
+}
+function spark(cv, vals, max, color, target) {
+  const dpr = window.devicePixelRatio || 1, w = cv.clientWidth, h = cv.clientHeight;
+  if (!w) return;
+  cv.width = w * dpr; cv.height = h * dpr;
+  const g = cv.getContext("2d"); g.scale(dpr, dpr); g.clearRect(0, 0, w, h);
+  const n = S.rounds, X = i => 2 + (w - 4) * i / Math.max(1, n - 1), Y = v => h - 3 - (h - 6) * clamp(v / max, 0, 1);
+  g.strokeStyle = "rgba(126,156,214,.18)"; g.lineWidth = 1;
+  g.beginPath(); g.moveTo(0, h - 2.5); g.lineTo(w, h - 2.5); g.stroke();
+  if (target != null) { g.setLineDash([3, 3]); g.beginPath(); g.moveTo(0, Y(target)); g.lineTo(w, Y(target)); g.stroke(); g.setLineDash([]); }
+  if (!vals.length) return;
+  g.beginPath(); vals.forEach((v, i) => i ? g.lineTo(X(i), Y(v)) : g.moveTo(X(i), Y(v)));
+  g.lineTo(X(vals.length - 1), h); g.lineTo(X(0), h); g.closePath();
+  g.fillStyle = color + "22"; g.fill();
+  g.beginPath(); vals.forEach((v, i) => i ? g.lineTo(X(i), Y(v)) : g.moveTo(X(i), Y(v)));
+  g.strokeStyle = color; g.lineWidth = 1.6; g.stroke();
+  const l = vals.length - 1; g.fillStyle = color; g.beginPath(); g.arc(X(l), Y(vals[l]), 2.6, 0, Math.PI * 2); g.fill();
+}
+function renderStats() {
+  const m = metrics(S);
+  $("diV").textContent = `${m.di.toFixed(1)} / ${diTarget(S)}`;
+  $("topV").textContent = `${Math.round(m.top * 100)}%`;
+  $("topV").style.color = m.top > MONOPOLY_SHARE ? "var(--bad)" : "";
+  $("dataV").textContent = `${Math.round(m.data * 100)}%`;
+  spark($("diC"), S.history.map(h => h.di), Math.max(diTarget(S) * 1.3, ...S.history.map(h => h.di)), "#4dc48c", diTarget(S));
+  spark($("topC"), S.history.map(h => h.top), 1, "#e8586d", MONOPOLY_SHARE);
+}
+function renderLog() {
+  $("logList").innerHTML = S.log.slice(-60).reverse().map(l => {
+    const who = l.pid >= 0 ? `<b style="color:${P(S, l.pid).color}">${esc(P(S, l.pid).short)}</b> ` : "";
+    return `<li><span class="rn">R${l.r}</span><span>${who}${esc(l.text)}</span></li>`;
+  }).join("");
+}
+function modeHelp(m) {
+  return {
+    alone: "Full price. Data stays private, towers serve only you, new outposts claim a safety zone. Keep all revenue.",
+    consortium: "25% off costs. Data and towers are shared with other consortium members. 20% of revenue is pooled and split. Needs a partner.",
+    commons: `The pool pays up to half of each action. Data goes public, towers serve everyone. 30% of revenue feeds the pool.`,
+  }[m];
+}
+function renderControl() {
+  const el = $("control");
+  if (!S || S.phase === "setup") { el.innerHTML = `<h2>Ready when you are</h2><p>Set up the table to begin.</p>`; return; }
+  if (S.phase === "over") {
+    const o = outcome(S);
+    el.innerHTML = `<span class="eyebrow">Mission complete</span><h2>${{ growth: "Sustained growth", monopoly: "Monopolization", stagnation: "Stagnation" }[o.kind]}</h2><div class="row"><button class="btn" type="button" id="cReport">See the assessment</button><button class="btn ghost" type="button" id="cNew">New game</button></div>`;
+    $("cReport").onclick = () => showEnd();
+    $("cNew").onclick = () => openSetup();
+    return;
+  }
+  const pid = currentPid(), p = pid != null ? P(S, pid) : null;
+  if (S.phase === "production" || !p) { el.innerHTML = `<span class="eyebrow">Round ${S.round}</span><h2>${S.phase === "production" ? "Production" : "Next phase"}</h2><div class="working"><span class="pulse"></span>${S.phase === "production" ? "Outposts are reporting yields…" : "Tallying the declarations…"}</div>`; return; }
+  const who = `<span style="color:${p.color}">${esc(p.name)}</span>`;
+  if (!p.human) {
+    const verb = S.phase === "funding" ? "is choosing a funding model" : "is operating";
+    el.innerHTML = `<span class="eyebrow">Round ${S.round} · ${S.phase === "funding" ? "Funding" : "Operations"}</span><h2>${who}</h2><div class="working"><span class="pulse"></span>${verb}…</div>${lastAction[pid] ? `<p>${esc(lastAction[pid])}</p>` : ""}`;
+    return;
+  }
+  if (S.phase === "funding") {
+    const taken = S.players.filter(q => q.mode).map(q => `${q.short}: ${MODE_LABEL[q.mode]}`).join(" · ");
+    el.innerHTML = `<span class="eyebrow">Round ${S.round} · Funding · ${esc(S.event.name)}</span><h2>How will ${who} fund this round?</h2>
+      <p>${esc(S.event.text)}${taken ? ` Declared so far: ${esc(taken)}.` : " You declare first."}</p>
+      <div class="opts">${MODES.map(m => `<button class="opt" type="button" data-mode="${m}"><span class="t">${modeChip(m)}</span><span class="d">${esc(modeHelp(m))}</span></button>`).join("")}</div>`;
+    el.querySelectorAll("[data-mode]").forEach(b => b.onclick = () => humanMode(b.dataset.mode));
+    return;
+  }
+  const acts = ["prospect", "outpost", "infra"];
+  el.innerHTML = `<span class="eyebrow">Round ${S.round} · Operations · ${S.actionsLeft} action${S.actionsLeft === 1 ? "" : "s"} left</span>
+    <h2>${who} ${modeChip(p.eff)}</h2>
+    <p>${armed ? `Pick a tile for <strong>${ACTION_LABEL[armed]}</strong>.` : "Choose an action, then a tile on the board."}</p>
+    <div class="opts">${acts.map(a => {
+      const c = actionCost(S, p, a), ok = p.credits >= c.net;
+      const d = { prospect: "Reveal a tile's ice, sun and roughness.", outpost: p.eff === "alone" ? "Claim an empty tile and a safety zone around it. Blind landings on rough ground can fail." : "Claim an empty tile. Blind landings on rough ground can fail.", infra: "Build on a tile you hold. Boosts nearby eligible outposts by +1." }[a];
+      return `<button class="opt ${armed === a ? "on" : ""}" type="button" data-act="${a}" ${ok ? "" : "disabled"}><span class="t">${ACTION_LABEL[a]}<span class="num">${c.net}${c.subsidy ? ` <span style="color:var(--ice)">(pool −${c.subsidy})</span>` : ""}</span></span><span class="d">${d}</span></button>`;
+    }).join("")}</div>
+    <div class="row"><button class="btn ghost" type="button" id="endTurn">End turn</button></div>`;
+  el.querySelectorAll("[data-act]").forEach(b => b.onclick = () => { armed = armed === b.dataset.act ? null : b.dataset.act; canvas.classList.toggle("armed", !!armed); renderControl(); refreshHighlight(); renderInspector(); });
+  $("endTurn").onclick = () => { armed = null; canvas.classList.remove("armed"); log(S, pid, "ended its turn early."); finishTurn(); };
+}
+function renderInspector() {
+  const el = $("inspector");
+  const id = hoverTile >= 0 ? hoverTile : selectTile;
+  if (!S || id < 0) {
+    el.innerHTML = `<span class="eyebrow">Tile inspector</span><p class="insp-note">Point at a tile to see what is known about it. Dark crater floors tend to hold ice; bright ridges get more sun.</p>`;
+    return;
+  }
+  const t = S.tiles[id], k = knows(t, viewer);
+  const owner = t.owner >= 0 ? `<span style="color:${P(S, t.owner).color}">${esc(P(S, t.owner).short)} outpost</span>` : "Unclaimed";
+  const zh = zoneHolder(S, t, viewer);
+  const zoneNote = t.zone ? `<div class="insp-note">Safety zone declared on the bordering tiles.</div>` : zh >= 0 ? `<div class="insp-note">Inside ${esc(P(S, zh).short)}'s safety zone.</div>` : "";
+  const tower = t.infra ? (t.infra.owner < 0 ? "Public relay tower" : `${esc(P(S, t.infra.owner).short)} tower · ${t.infra.scope}`) : "";
+  const res = k ? `<div class="res"><span class="ice">Ice ${t.ice}</span><span class="sun">Sun ${t.sun}</span>${t.rough ? `<span class="rough">Rough</span>` : `<span>Smooth</span>`}</div>`
+    : `<div class="res"><span style="color:var(--dim)">No survey data for ${esc(P(S, viewer).short)}</span></div><div class="insp-note">Looks ${t.prior.frac > .65 ? "mostly shadowed (ice likely)" : t.prior.frac > .3 ? "partly shadowed" : "sunlit"}${t.prior.height > .75 ? ", high ground" : ""}.</div>`;
+  let yieldNote = "";
+  if (t.owner >= 0 && (k || t.owner === viewer)) yieldNote = `<div class="insp-note">Yields about ${r1(tileYield(S, t))} per round before upkeep (${towerBonus(S, t, t.owner)} tower bonus).</div>`;
+  let actionRow = "";
+  if (armed && humanActing()) {
+    const chk = canDo(S, P(S, currentPid()), armed, t);
+    actionRow = chk.ok ? `<div class="row"><button class="btn" type="button" id="doHere">${ACTION_LABEL[armed]} here · ${chk.cost.net}</button></div>${chk.blind && armed === "outpost" ? `<div class="insp-note">You have no data here. If it is rough ground, the landing fails 35% of the time.</div>` : ""}`
+      : `<div class="insp-note" style="color:var(--bad)">${esc(chk.why)}</div>`;
+  }
+  el.innerHTML = `<div class="insp-h"><b>${tileLabel(t)}</b><span class="eyebrow">${owner}</span></div>${res}${tower ? `<div class="insp-note">${tower}</div>` : ""}${zoneNote}${yieldNote}${actionRow}`;
+  const b = $("doHere"); if (b) b.onclick = () => tryAction(id);
+}
+function renderAll() { renderTop(); renderPlayers(); renderControl(); renderInspector(); renderLog(); renderStats(); }
+
+// ---------- Flow ----------
+function humanMode(mode) {
+  if (!humanActing() || S.phase !== "funding") return;
+  const pid = currentPid();
+  setMode(S, pid, mode);
+  log(S, pid, `chose ${MODE_LABEL[mode]} funding.`);
+  nextFunding();
+}
+function tryAction(tileId) {
+  if (!armed || !humanActing() || S.phase !== "action") return;
+  const pid = currentPid();
+  const res = doAction(S, pid, armed, tileId);
+  if (!res.ok) { selectTile = tileId; renderInspector(); return; }
+  applyFx(res.fx);
+  armed = null; canvas.classList.remove("armed"); selectTile = -1;
+  S.actionsLeft--;
+  if (S.actionsLeft <= 0 || !["prospect", "outpost", "infra"].some(a => canDo(S, P(S, pid), a, null).ok)) later(finishTurn, 350);
+  renderAll(); refreshHighlight();
+}
+function applyFx(fx) {
+  if (!fx) return;
+  const col = P(S, fx.pid).color;
+  if (fx.type === "prospect") { ringPulse(fx.tile, col); }
+  if (fx.type === "outpost" && fx.failed) { ringPulse(fx.tile, "#e8586d"); floatText(fx.tile, "Lander lost", "#e8586d"); }
+  syncPieces(true); syncCards(true); syncStacks();
+}
+function nextFunding() {
+  if (S.fi >= 4) { resolveModes(S); syncStacks(); renderAll(); later(nextTurn, 500); return; }
+  renderAll();
+  const p = P(S, currentPid());
+  if (p.human) { viewer = p.id; syncCards(false); renderAll(); return; }
+  later(() => { if (S.phase !== "funding" || currentPid() !== p.id || p.mode) return; const m = aiChooseMode(S, p); setMode(S, p.id, m); log(S, p.id, `chose ${MODE_LABEL[m]} funding.`); nextFunding(); }, 650);
+}
+function nextTurn() {
+  if (S.ti >= 4) { runProduction(); return; }
+  const p = P(S, currentPid());
+  renderAll();
+  if (p.human) {
+    viewer = p.id; syncCards(false); renderAll();
+    if (!["prospect", "outpost", "infra"].some(a => canDo(S, p, a, null).ok)) { log(S, p.id, "had no credits to act."); later(finishTurn, 900); }
+    return;
+  }
+  later(aiStep, 500);
+}
+function aiStep() {
+  if (S.phase !== "action" || S.ti >= 4) return;
+  const p = P(S, currentPid());
+  if (p.human) return;
+  const plan = aiPlan(S, p);
+  if (!plan) { lastAction[p.id] = null; if (S.actionsLeft === 2) log(S, p.id, "held its credits this round."); finishTurn(); return; }
+  const res = doAction(S, p.id, plan.type, plan.tile);
+  lastAction[p.id] = res.text ? `${p.short} ${res.text}` : null;
+  if (res.ok) applyFx(res.fx);
+  S.actionsLeft--;
+  renderAll();
+  if (S.actionsLeft <= 0) later(finishTurn, 700); else later(aiStep, 800);
+}
+function finishTurn() {
+  S.ti++; S.actionsLeft = 2; armed = null; canvas.classList.remove("armed");
+  nextTurn();
+}
+function runProduction() {
+  const out = produce(S);
+  renderAll();
+  for (const y of out.yields) floatText(y.tile, `+${y.y}`, P(S, y.pid).color);
+  syncPieces(true); syncStacks(); syncCards(false);
+  later(() => {
+    if (S.round >= S.rounds) { S.phase = "over"; renderAll(); showEnd(); return; }
+    beginRound();
+  }, 1900);
+}
+function beginRound() {
+  const fx = startRound(S);
+  syncCards(true); fx.forEach(id => ringPulse(id, "#7fd3f1"));
+  renderAll();
+  later(nextFunding, 700);
+}
+
+function showEnd() {
+  const o = outcome(S), m = o.m, leader = P(S, m.leader);
+  const title = { growth: "Sustained growth", monopoly: "Monopolization", stagnation: "Stagnation" }[o.kind];
+  $("endTitle").textContent = title; $("endTitle").className = "outcome " + o.kind;
+  const text = {
+    growth: "Infrastructure and survey data spread widely enough that every operator could build on each other's work. The south pole has the start of a real supply chain.",
+    monopoly: `${leader.name} holds ${Math.round(m.top * 100)}% of lunar wealth. Access to ice, power and survey data now runs through one operator, and everyone else builds on its terms.`,
+    stagnation: `The region reached a development index of ${m.di}, short of the ${diTarget(S)} needed for a working supply chain. Too much capital sat idle or went into duplicated effort.`,
+  }[o.kind];
+  $("endText").textContent = text;
+  $("kDi").textContent = `${m.di} / ${diTarget(S)}`;
+  $("kTop").textContent = `${Math.round(m.top * 100)}%`;
+  $("kData").textContent = `${Math.round(m.data * 100)}%`;
+  const counts = S.players.map(p => { const c = { alone: 0, commons: 0, consortium: 0 }; S.modeHistory.forEach(r => c[r[p.id]]++); return c; });
+  const rows = S.players.map(p => ({ p, nw: netWorth(S, p), out: S.tiles.filter(t => t.owner === p.id).length, inf: S.tiles.filter(t => t.infra && t.infra.owner === p.id).length })).sort((a, b) => b.nw - a.nw);
+  $("standings").innerHTML = `<tr><th>Operator</th><th class="num">Net worth</th><th class="num">Outposts</th><th class="num">Towers</th><th>Alone / Commons / Consortium</th></tr>` +
+    rows.map(r => `<tr><td><span class="pdot" style="display:inline-block;background:${r.p.color};margin-right:8px;vertical-align:middle"></span>${esc(r.p.name)}${r.p.human ? " (you)" : ""}</td><td class="num">${r.nw.toFixed(1)}</td><td class="num">${r.out}</td><td class="num">${r.inf}</td><td class="num" style="text-align:left">${counts[r.p.id].alone} / ${counts[r.p.id].commons} / ${counts[r.p.id].consortium}</td></tr>`).join("");
+  const tot = counts.reduce((s, c) => ({ alone: s.alone + c.alone, commons: s.commons + c.commons, consortium: s.consortium + c.consortium }), { alone: 0, commons: 0, consortium: 0 });
+  const relays = S.tiles.filter(t => t.infra && t.infra.owner < 0).length;
+  $("endNote").textContent = `Across ${S.rounds} rounds the table chose Alone ${tot.alone} times, Commons ${tot.commons} times and Consortium ${tot.consortium} times. The commons pool built ${relays} public relay tower${relays === 1 ? "" : "s"}, and ${m.open} of 80 tiles ended with open survey data.`;
+  $("endModal").hidden = false;
+  requestAnimationFrame(() => drawEndChart());
+}
+function drawEndChart() {
+  const cv = $("endChart"), dpr = window.devicePixelRatio || 1, w = cv.clientWidth, h = cv.clientHeight;
+  cv.width = w * dpr; cv.height = h * dpr;
+  const g = cv.getContext("2d"); g.scale(dpr, dpr);
+  const pad = { l: 34, r: 34, t: 8, b: 20 }, n = S.rounds;
+  const X = i => pad.l + (w - pad.l - pad.r) * i / Math.max(1, n - 1);
+  const maxDi = Math.max(diTarget(S) * 1.25, ...S.history.map(x => x.di));
+  const Yd = v => pad.t + (h - pad.t - pad.b) * (1 - v / maxDi), Ys = v => pad.t + (h - pad.t - pad.b) * (1 - v);
+  const cs = getComputedStyle(document.documentElement);
+  g.font = "11px 'IBM Plex Mono', monospace"; g.fillStyle = cs.getPropertyValue("--muted"); g.strokeStyle = "rgba(126,156,214,.18)";
+  for (let i = 0; i < n; i++) { g.textAlign = "center"; g.fillText(i + 1, X(i), h - 5); }
+  g.textAlign = "right"; g.fillText(Math.round(maxDi), pad.l - 6, pad.t + 8); g.fillText("0", pad.l - 6, h - pad.b);
+  g.textAlign = "left"; g.fillText("100%", w - pad.r + 4, pad.t + 8); g.fillText("0%", w - pad.r + 4, h - pad.b);
+  g.setLineDash([3, 4]);
+  g.beginPath(); g.moveTo(pad.l, Yd(diTarget(S))); g.lineTo(w - pad.r, Yd(diTarget(S))); g.strokeStyle = "rgba(77,196,140,.5)"; g.stroke();
+  g.beginPath(); g.moveTo(pad.l, Ys(MONOPOLY_SHARE)); g.lineTo(w - pad.r, Ys(MONOPOLY_SHARE)); g.strokeStyle = "rgba(232,88,109,.5)"; g.stroke();
+  g.setLineDash([]);
+  const line = (vals, Y, col) => { g.beginPath(); vals.forEach((v, i) => i ? g.lineTo(X(i), Y(v)) : g.moveTo(X(i), Y(v))); g.strokeStyle = col; g.lineWidth = 2; g.stroke(); const l = vals.length - 1; g.fillStyle = col; g.beginPath(); g.arc(X(l), Y(vals[l]), 3.2, 0, Math.PI * 2); g.fill(); };
+  line(S.history.map(x => x.di), Yd, "#4dc48c");
+  line(S.history.map(x => x.top), Ys, "#e8586d");
+}
+
+// ---------- Setup ----------
+function renderSetup() {
+  $("seats").innerHTML = PLAYER_DEFS.map((d, i) => `<div class="seat"><span class="pdot" style="background:${d.color}"></span><div><strong>${esc(d.name)}</strong><small>${setup.humans[i] ? "Played by a person at this screen" : "AI: " + esc(d.blurb)}</small></div>
+    <span class="seg" data-seat="${i}"><button type="button" data-v="h" class="${setup.humans[i] ? "on" : ""}">Human</button><button type="button" data-v="a" class="${setup.humans[i] ? "" : "on"}">AI</button></span></div>`).join("");
+  $("seats").querySelectorAll("[data-seat] button").forEach(b => b.onclick = () => { setup.humans[+b.parentElement.dataset.seat] = b.dataset.v === "h"; renderSetup(); });
+  $("roundsSeg").querySelectorAll("button").forEach(b => { b.classList.toggle("on", +b.dataset.v === setup.rounds); b.onclick = () => { setup.rounds = +b.dataset.v; renderSetup(); }; });
+  $("paceSeg").querySelectorAll("button").forEach(b => { b.classList.toggle("on", b.dataset.v === setup.pace); b.onclick = () => { setup.pace = b.dataset.v; renderSetup(); }; });
+}
+function openSetup() { $("endModal").hidden = true; renderSetup(); $("setupModal").hidden = false; }
+function ensureTerrain(seed) {
+  if (terrainSeed === seed && T) return;
+  T = buildTerrain(seed); terrainSeed = seed;
+  buildTerrainMesh();
+}
+function clearBoard() {
+  for (const [, o] of pieces) scene.remove(o); pieces.clear();
+  for (const [, o] of cards) { scene.remove(o); o.material[2].dispose(); } cards.clear();
+  anims.length = 0;
+}
+function startGame(seed) {
+  flow++;
+  seed = seed != null ? seed : (Math.random() * 2 ** 31) | 0;
+  ensureTerrain(seed);
+  S = newGame({ seed, rounds: setup.rounds, humans: setup.humans }, T);
+  S.pace = setup.pace;
+  viewer = Math.max(0, setup.humans.indexOf(true));
+  clearBoard(); buildStacks(); syncStacks();
+  $("setupModal").hidden = true; $("endModal").hidden = true;
+  armed = null; hoverTile = selectTile = -1;
+  beginRound();
+}
+function resume() {
+  // Continue an in-progress game restored from a snapshot.
+  flow++;
+  ensureTerrain(S.seed);
+  clearBoard(); buildStacks(); syncPieces(false); syncCards(false); syncStacks();
+  renderAll();
+  if (S.phase === "funding") nextFunding();
+  else if (S.phase === "action") nextTurn();
+  else if (S.phase === "production") later(() => { if (S.round >= S.rounds) { S.phase = "over"; renderAll(); showEnd(); } else beginRound(); }, 400);
+  else if (S.phase === "over") showEnd();
+}
+
+$("startBtn").onclick = () => startGame();
+$("setupRules").onclick = () => { $("helpModal").hidden = false; };
+$("helpBtn").onclick = () => { $("helpModal").hidden = false; };
+$("helpModal").querySelector("[data-close]").onclick = () => { $("helpModal").hidden = true; };
+$("helpModal").addEventListener("click", e => { if (e.target.id === "helpModal") $("helpModal").hidden = true; });
+$("newBtn").onclick = () => openSetup();
+$("viewBtn").onclick = () => resetView();
+$("againBtn").onclick = () => startGame();
+$("setupBtn").onclick = () => openSetup();
+$("boardBtn").onclick = () => { $("endModal").hidden = true; };
+$("sheetToggle").onclick = () => { app.classList.toggle("show-log"); $("sheetToggle").textContent = app.classList.contains("show-log") ? "Hide log" : "Log"; requestAnimationFrame(resize); };
+
+let resizeRaf = 0;
+window.addEventListener("resize", () => { cancelAnimationFrame(resizeRaf); resizeRaf = requestAnimationFrame(() => { resize(); resetView(); if (S) renderStats(); }); });
+
+function boot(data) {
+  resize(); resetView();
+  requestAnimationFrame(frame);
+  const go = () => {
+    if (data && data.S && data.S.tiles) {
+      S = data.S; setup = Object.assign(setup, data.setup || {}); viewer = data.viewer || 0;
+      resume();
+    } else {
+      // Open on a live board: build the terrain behind the setup sheet.
+      ensureTerrain(20260930);
+      S = newGame({ seed: 20260930, rounds: setup.rounds, humans: setup.humans }, T);
+      buildStacks(); syncStacks(); renderAll();
+      openSetup();
+    }
+    resize();
+  };
+  const fonts = document.fonts && document.fonts.ready ? Promise.race([document.fonts.ready, new Promise(r => setTimeout(r, 1500))]) : Promise.resolve();
+  fonts.then(go, go);
+}
+window.claude?.hot?.snapshot?.(() => ({ S, setup, viewer }));
+window.claude?.hot?.ready ? window.claude.hot.ready(boot) : boot(window.claude?.hot?.data ?? {});
+</script>
